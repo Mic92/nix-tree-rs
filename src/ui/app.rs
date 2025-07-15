@@ -159,7 +159,8 @@ impl App {
                         }
                         KeyCode::PageDown => {
                             let page_size = 10; // Adjust based on your modal height
-                            *selected = (*selected + page_size).min(formatted_lines.len().saturating_sub(1));
+                            *selected = (*selected + page_size)
+                                .min(formatted_lines.len().saturating_sub(1));
                             *vertical_scroll_state = vertical_scroll_state
                                 .content_length(formatted_lines.len())
                                 .position(*selected);

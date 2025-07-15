@@ -279,9 +279,7 @@ pub fn render_why_depends(
             // Apply horizontal scroll by slicing the text safely at char boundaries
             let text_to_show = if horizontal_scroll < text.len() {
                 // Skip the first `horizontal_scroll` characters safely
-                text.chars()
-                    .skip(horizontal_scroll)
-                    .collect::<String>()
+                text.chars().skip(horizontal_scroll).collect::<String>()
             } else {
                 String::new()
             };

@@ -48,7 +48,14 @@ async fn main() -> Result<()> {
     }
 
     println!("Loading store paths...");
-    let graph = nix::query_path_info(&paths, true, config.store.as_deref()).await?;
+    let graph = nix::query_path_info(
+        &paths,
+        true,
+        config.store.as_deref(),
+        &config.nix_options,
+        config.file.as_deref(),
+    )
+    .await?;
 
     println!("Calculating sizes...");
     let stats = path_stats::calculate_stats(&graph);
@@ -120,7 +127,7 @@ async fn run_app(
                         break;
                     }
                     needs_render = true;
-                    
+
                     // Process at most 10 additional events per frame to reduce jumpiness
                     let mut events_processed = 0;
                     while events_processed < 10 && event::poll(Duration::from_millis(0))? {

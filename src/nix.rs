@@ -22,19 +22,31 @@ struct NixPathInfo {
 async fn resolve_paths(
     paths: &[String],
     store: Option<&str>,
+    nix_options: &[(String, String)],
+    file: Option<&str>,
 ) -> Result<Vec<String>> {
     let mut cmd = Command::new("nix");
     cmd.arg("--extra-experimental-features")
-        .arg("nix-command flakes")
-        .arg("path-info")
-        .arg("--json")
-        .args(paths)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .arg("nix-command flakes");
+
+    // Add nix options
+    for (name, value) in nix_options {
+        cmd.arg("--option").arg(name).arg(value);
+    }
 
     if let Some(store_url) = store {
         cmd.arg("--store").arg(store_url);
     }
+
+    if let Some(file_path) = file {
+        cmd.arg("--file").arg(file_path);
+    }
+
+    cmd.arg("path-info")
+        .arg("--json")
+        .args(paths)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     let output = cmd.output().await.context("Failed to run nix path-info")?;
 
@@ -55,14 +67,30 @@ pub async fn query_path_info(
     paths: &[String],
     recursive: bool,
     store: Option<&str>,
+    nix_options: &[(String, String)],
+    file: Option<&str>,
 ) -> Result<StorePathGraph> {
     // First resolve any flake references to store paths
-    let resolved_paths = resolve_paths(paths, store).await?;
+    let resolved_paths = resolve_paths(paths, store, nix_options, file).await?;
 
     let mut cmd = Command::new("nix");
     cmd.arg("--extra-experimental-features")
-        .arg("nix-command flakes")
-        .arg("path-info")
+        .arg("nix-command flakes");
+
+    // Add nix options
+    for (name, value) in nix_options {
+        cmd.arg("--option").arg(name).arg(value);
+    }
+
+    if let Some(store_url) = store {
+        cmd.arg("--store").arg(store_url);
+    }
+
+    if let Some(file_path) = file {
+        cmd.arg("--file").arg(file_path);
+    }
+
+    cmd.arg("path-info")
         .arg("--json")
         .arg("--closure-size")
         .args(&resolved_paths)
@@ -71,10 +99,6 @@ pub async fn query_path_info(
 
     if recursive {
         cmd.arg("--recursive");
-    }
-
-    if let Some(store_url) = store {
-        cmd.arg("--store").arg(store_url);
     }
 
     let output = cmd
