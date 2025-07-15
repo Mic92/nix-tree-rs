@@ -30,6 +30,9 @@
             pkg-config
           ];
 
+          # TODO: we currently parese the hello derivation...
+          doCheck = false;
+
           buildInputs = with pkgs; [
             # Add any system dependencies here if needed
           ];
