@@ -86,6 +86,7 @@ impl StorePathGraph {
             store_path
                 .references
                 .iter()
+                .filter(|ref_path| ref_path != &path) // Filter out self-references
                 .filter_map(|ref_path| self.get_path(ref_path))
                 .collect()
         } else {
@@ -96,7 +97,7 @@ impl StorePathGraph {
     pub fn get_referrers(&self, path: &str) -> Vec<&StorePath> {
         self.paths
             .iter()
-            .filter(|p| p.references.contains(&path.to_string()))
+            .filter(|p| p.path != path && p.references.contains(&path.to_string()))
             .collect()
     }
 
