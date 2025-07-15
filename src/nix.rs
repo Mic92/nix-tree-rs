@@ -24,7 +24,9 @@ async fn resolve_paths(
     store: Option<&str>,
 ) -> Result<Vec<String>> {
     let mut cmd = Command::new("nix");
-    cmd.arg("path-info")
+    cmd.arg("--extra-experimental-features")
+        .arg("nix-command flakes")
+        .arg("path-info")
         .arg("--json")
         .args(paths)
         .stdout(Stdio::piped())
@@ -58,7 +60,9 @@ pub async fn query_path_info(
     let resolved_paths = resolve_paths(paths, store).await?;
 
     let mut cmd = Command::new("nix");
-    cmd.arg("path-info")
+    cmd.arg("--extra-experimental-features")
+        .arg("nix-command flakes")
+        .arg("path-info")
         .arg("--json")
         .arg("--closure-size")
         .args(&resolved_paths)
