@@ -75,7 +75,7 @@ impl App {
         let mut app = Self {
             graph,
             stats,
-            sort_order: SortOrder::Alphabetical,
+            sort_order: SortOrder::ClosureSize,
             active_pane: Pane::Current,
             show_help: false,
             searching: false,
@@ -110,7 +110,7 @@ impl App {
                 Modal::WhyDepends {
                     paths,
                     formatted_lines,
-                    max_line_width: _,
+                    max_line_width,
                     selected,
                     vertical_scroll_state,
                     horizontal_scroll_state,
@@ -121,15 +121,19 @@ impl App {
                             self.modal = None;
                         }
                         KeyCode::Down | KeyCode::Char('j') => {
-                            if *selected < formatted_lines.len() - 1 {
+                            if *selected < formatted_lines.len().saturating_sub(1) {
                                 *selected += 1;
-                                *vertical_scroll_state = vertical_scroll_state.position(*selected);
+                                *vertical_scroll_state = vertical_scroll_state
+                                    .content_length(formatted_lines.len())
+                                    .position(*selected);
                             }
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
                             if *selected > 0 {
                                 *selected -= 1;
-                                *vertical_scroll_state = vertical_scroll_state.position(*selected);
+                                *vertical_scroll_state = vertical_scroll_state
+                                    .content_length(formatted_lines.len())
+                                    .position(*selected);
                             }
                         }
                         KeyCode::Enter => {
@@ -141,23 +145,31 @@ impl App {
                         }
                         KeyCode::Left | KeyCode::Char('h') => {
                             *horizontal_scroll = horizontal_scroll.saturating_sub(5);
-                            *horizontal_scroll_state =
-                                horizontal_scroll_state.position(*horizontal_scroll);
+                            *horizontal_scroll_state = horizontal_scroll_state
+                                .content_length(*max_line_width)
+                                .position(*horizontal_scroll);
                         }
                         KeyCode::Right | KeyCode::Char('l') => {
-                            *horizontal_scroll = horizontal_scroll.saturating_add(5);
-                            *horizontal_scroll_state =
-                                horizontal_scroll_state.position(*horizontal_scroll);
+                            // Don't scroll beyond the longest line
+                            let max_scroll = max_line_width.saturating_sub(20); // Leave some buffer
+                            *horizontal_scroll = (*horizontal_scroll + 5).min(max_scroll);
+                            *horizontal_scroll_state = horizontal_scroll_state
+                                .content_length(*max_line_width)
+                                .position(*horizontal_scroll);
                         }
                         KeyCode::PageDown => {
                             let page_size = 10; // Adjust based on your modal height
-                            *selected = (*selected + page_size).min(formatted_lines.len() - 1);
-                            *vertical_scroll_state = vertical_scroll_state.position(*selected);
+                            *selected = (*selected + page_size).min(formatted_lines.len().saturating_sub(1));
+                            *vertical_scroll_state = vertical_scroll_state
+                                .content_length(formatted_lines.len())
+                                .position(*selected);
                         }
                         KeyCode::PageUp => {
                             let page_size = 10;
                             *selected = selected.saturating_sub(page_size);
-                            *vertical_scroll_state = vertical_scroll_state.position(*selected);
+                            *vertical_scroll_state = vertical_scroll_state
+                                .content_length(formatted_lines.len())
+                                .position(*selected);
                         }
                         _ => {}
                     }
@@ -353,7 +365,8 @@ impl App {
                         .collect::<Vec<_>>()
                         .join(" → ");
 
-                    max_line_width = max_line_width.max(text.len());
+                    // Count characters instead of bytes for proper UTF-8 handling
+                    max_line_width = max_line_width.max(text.chars().count());
                     formatted_lines.push(text);
                 }
 

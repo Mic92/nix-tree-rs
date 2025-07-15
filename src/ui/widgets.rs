@@ -34,10 +34,11 @@ pub fn render_help(f: &mut Frame, area: Rect) {
     let block = Block::default()
         .title("Help")
         .borders(Borders::ALL)
-        .style(Style::default().fg(Color::White));
+        .style(Style::default().fg(Color::Black).bg(Color::White));
 
     let paragraph = Paragraph::new(help_text)
         .block(block)
+        .style(Style::default().fg(Color::Black).bg(Color::White))
         .alignment(Alignment::Left);
 
     let help_area = centered_rect(60, 70, area);
@@ -236,8 +237,8 @@ pub fn render_why_depends(
     formatted_lines: &[String],
     max_line_width: usize,
     selected: usize,
-    vertical_scroll_state: &mut ScrollbarState,
-    horizontal_scroll_state: &mut ScrollbarState,
+    vertical_scroll_state: ScrollbarState,
+    horizontal_scroll_state: ScrollbarState,
     horizontal_scroll: usize,
 ) {
     let modal_area = centered_rect(90, 60, area);
@@ -253,10 +254,10 @@ pub fn render_why_depends(
     f.render_widget(block, modal_area);
 
     // Calculate visible window
-    let visible_height = inner_area.height as usize;
+    let visible_height = inner_area.height.saturating_sub(1) as usize; // Leave room for borders
 
     // Calculate scroll offset to keep selected item visible
-    let scroll_offset = if selected >= visible_height {
+    let scroll_offset = if visible_height > 0 && selected >= visible_height {
         selected.saturating_sub(visible_height / 2)
     } else {
         0
@@ -275,11 +276,14 @@ pub fn render_why_depends(
                 Style::default()
             };
 
-            // Apply horizontal scroll by slicing the text
+            // Apply horizontal scroll by slicing the text safely at char boundaries
             let text_to_show = if horizontal_scroll < text.len() {
-                &text[horizontal_scroll..]
+                // Skip the first `horizontal_scroll` characters safely
+                text.chars()
+                    .skip(horizontal_scroll)
+                    .collect::<String>()
             } else {
-                ""
+                String::new()
             };
 
             Line::from(text_to_show).style(style)
@@ -290,33 +294,40 @@ pub fn render_why_depends(
     let paragraph = Paragraph::new(visible_lines);
     f.render_widget(paragraph, inner_area);
 
-    // Render vertical scrollbar
-    let vertical_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-        .begin_symbol(Some("↑"))
-        .end_symbol(Some("↓"));
+    // Render vertical scrollbar if there are items to scroll
+    if !formatted_lines.is_empty() && formatted_lines.len() > visible_height {
+        let vertical_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
 
-    f.render_stateful_widget(
-        vertical_scrollbar,
-        inner_area.inner(Margin {
-            vertical: 1,
-            horizontal: 0,
-        }),
-        vertical_scroll_state,
-    );
+        let mut v_state = vertical_scroll_state;
+        // Ensure the inner area calculation doesn't go negative
+        if inner_area.height > 2 {
+            f.render_stateful_widget(
+                vertical_scrollbar,
+                inner_area.inner(Margin {
+                    vertical: 1,
+                    horizontal: 0,
+                }),
+                &mut v_state,
+            );
+        }
+    }
 
     // Render horizontal scrollbar if content is wider than view
-    if max_line_width > inner_area.width as usize {
+    if max_line_width > inner_area.width as usize && inner_area.width > 2 {
         let horizontal_scrollbar = Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
             .begin_symbol(Some("←"))
             .end_symbol(Some("→"));
 
+        let mut h_state = horizontal_scroll_state;
         f.render_stateful_widget(
             horizontal_scrollbar,
             inner_area.inner(Margin {
                 vertical: 0,
                 horizontal: 1,
             }),
-            horizontal_scroll_state,
+            &mut h_state,
         );
     }
 }
@@ -333,18 +344,14 @@ pub fn render_modal(f: &mut Frame, app: &App, area: Rect) {
                 horizontal_scroll_state,
                 horizontal_scroll,
             } => {
-                // Clone the states since we can't mutate them here
-                let mut v_state = vertical_scroll_state.clone();
-                let mut h_state = horizontal_scroll_state.clone();
-
                 render_why_depends(
                     f,
                     area,
                     formatted_lines,
                     *max_line_width,
                     *selected,
-                    &mut v_state,
-                    &mut h_state,
+                    *vertical_scroll_state,
+                    *horizontal_scroll_state,
                     *horizontal_scroll,
                 );
             }

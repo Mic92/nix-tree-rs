@@ -6,7 +6,7 @@ mod ui;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -85,34 +85,62 @@ async fn run_app(
     stats: std::collections::HashMap<String, path_stats::PathStats>,
 ) -> Result<()> {
     let mut app = ui::App::new(graph, stats);
+    let mut needs_render = true;
 
     loop {
-        terminal.draw(|f| {
-            let chunks =
-                Layout::vertical([Constraint::Min(1), Constraint::Length(4)]).split(f.area());
+        // Only render when needed
+        if needs_render {
+            terminal.draw(|f| {
+                let chunks =
+                    Layout::vertical([Constraint::Min(1), Constraint::Length(4)]).split(f.area());
 
-            ui::pane::render_panes(f, &app, chunks[0]);
-            ui::widgets::render_status_bar(f, &app, chunks[1]);
+                ui::pane::render_panes(f, &app, chunks[0]);
+                ui::widgets::render_status_bar(f, &app, chunks[1]);
 
-            if app.show_help {
-                ui::widgets::render_help(f, f.area());
-            }
-
-            if app.searching {
-                ui::widgets::render_search(f, f.area(), &app.search_query);
-            }
-
-            // Render modal on top
-            ui::widgets::render_modal(f, &app, f.area());
-        })?;
-
-        // Use event polling with timeout to prevent overwhelming the UI with key repeats
-        if event::poll(Duration::from_millis(16))? {
-            // ~60 FPS
-            if let Event::Key(key) = event::read()? {
-                if app.handle_key(key)? {
-                    break;
+                if app.show_help {
+                    ui::widgets::render_help(f, f.area());
                 }
+
+                if app.searching {
+                    ui::widgets::render_search(f, f.area(), &app.search_query);
+                }
+
+                // Render modal on top
+                ui::widgets::render_modal(f, &app, f.area());
+            })?;
+            needs_render = false;
+        }
+
+        // Poll with a shorter timeout for better responsiveness
+        if event::poll(Duration::from_millis(16))? {
+            match event::read()? {
+                // Only handle key press events, ignore key release events
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    if app.handle_key(key)? {
+                        break;
+                    }
+                    needs_render = true;
+                    
+                    // Process at most 10 additional events per frame to reduce jumpiness
+                    let mut events_processed = 0;
+                    while events_processed < 10 && event::poll(Duration::from_millis(0))? {
+                        match event::read()? {
+                            Event::Key(k) if k.kind == KeyEventKind::Press => {
+                                // Process the additional key event
+                                if app.handle_key(k)? {
+                                    return Ok(());
+                                }
+                                events_processed += 1;
+                            }
+                            Event::Resize(_, _) => needs_render = true,
+                            _ => {}
+                        }
+                    }
+                }
+                Event::Resize(_, _) => {
+                    needs_render = true;
+                }
+                _ => {}
             }
         }
     }
