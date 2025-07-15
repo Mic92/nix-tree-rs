@@ -1,0 +1,25 @@
+[package]
+name = "nix-tree"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jörg Thalheim <joerg@thalheim.io>"]
+description = "Interactive Nix dependency tree viewer"
+license = "BSD-3-Clause"
+
+[dependencies]
+anyhow = "1.0"
+bytesize = "2.0.1"
+crossterm = "0.29"
+indexmap = "2.2"
+ratatui = "0.29"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.38", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
