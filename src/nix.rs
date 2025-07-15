@@ -18,16 +18,50 @@ struct NixPathInfo {
     closure_size: Option<u64>,
 }
 
+/// Resolve flake references and other inputs to store paths
+async fn resolve_paths(
+    paths: &[String],
+    store: Option<&str>,
+) -> Result<Vec<String>> {
+    let mut cmd = Command::new("nix");
+    cmd.arg("path-info")
+        .arg("--json")
+        .args(paths)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    if let Some(store_url) = store {
+        cmd.arg("--store").arg(store_url);
+    }
+
+    let output = cmd.output().await.context("Failed to run nix path-info")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("nix path-info failed: {}", stderr);
+    }
+
+    let json_str = String::from_utf8(output.stdout).context("Invalid UTF-8 in nix output")?;
+    let path_info_map: std::collections::HashMap<String, NixPathInfo> =
+        serde_json::from_str(&json_str).context("Failed to parse nix path-info JSON")?;
+
+    // Return the resolved store paths
+    Ok(path_info_map.keys().cloned().collect())
+}
+
 pub async fn query_path_info(
     paths: &[String],
     recursive: bool,
     store: Option<&str>,
 ) -> Result<StorePathGraph> {
+    // First resolve any flake references to store paths
+    let resolved_paths = resolve_paths(paths, store).await?;
+
     let mut cmd = Command::new("nix");
     cmd.arg("path-info")
         .arg("--json")
         .arg("--closure-size")
-        .args(paths)
+        .args(&resolved_paths)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -72,7 +106,8 @@ pub async fn query_path_info(
         graph.add_path(store_path);
     }
 
-    graph.roots = paths.to_vec();
+    // Use the resolved paths as roots
+    graph.roots = resolved_paths;
     graph.disambiguate_names();
 
     Ok(graph)
