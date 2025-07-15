@@ -26,6 +26,7 @@ pub async fn query_path_info(
     let mut cmd = Command::new("nix");
     cmd.arg("path-info")
         .arg("--json")
+        .arg("--closure-size")
         .args(paths)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -98,4 +99,3 @@ pub async fn get_default_roots() -> Result<Vec<String>> {
 
     Ok(roots)
 }
-

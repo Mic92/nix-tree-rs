@@ -31,11 +31,20 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let paths = if config.paths.is_empty() {
+    let mut paths = if config.paths.is_empty() {
         nix::get_default_roots().await?
     } else {
         config.paths
     };
+
+    // Resolve symlinks for paths outside the Nix store
+    for path in &mut paths {
+        if !path.starts_with("/nix/store/") {
+            if let Ok(resolved) = tokio::fs::canonicalize(&path).await {
+                *path = resolved.to_string_lossy().to_string();
+            }
+        }
+    }
 
     println!("Loading store paths...");
     let graph = nix::query_path_info(&paths, true, config.store.as_deref()).await?;
@@ -79,7 +88,7 @@ async fn run_app(
     loop {
         terminal.draw(|f| {
             let chunks =
-                Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(f.area());
+                Layout::vertical([Constraint::Min(1), Constraint::Length(4)]).split(f.area());
 
             ui::pane::render_panes(f, &app, chunks[0]);
             ui::widgets::render_status_bar(f, &app, chunks[1]);

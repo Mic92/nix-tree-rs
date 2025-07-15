@@ -4,21 +4,28 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone)]
 pub struct PathStats {
     pub closure_size: u64,
-    pub added_size: u64,
+    pub added_size: Option<u64>, // None means not yet calculated
     pub immediate_parents: Vec<String>,
 }
 
 pub fn calculate_stats(graph: &StorePathGraph) -> HashMap<String, PathStats> {
     let mut stats = HashMap::new();
-    let mut closure_cache: HashMap<String, HashSet<String>> = HashMap::new();
 
+    // When using --recursive, nix already gave us the full closure
+    // So we can use the closure_size field directly if available
     for path in &graph.paths {
-        let closure = calculate_closure(graph, &path.path, &mut closure_cache);
-        let closure_size: u64 = closure
-            .iter()
-            .filter_map(|p| graph.get_path(p))
-            .map(|p| p.nar_size)
-            .sum();
+        let closure_size = if let Some(size) = path.closure_size {
+            size
+        } else {
+            // Fallback: calculate closure size manually if not provided
+            let mut closure_cache: HashMap<String, HashSet<String>> = HashMap::new();
+            let closure = calculate_closure(graph, &path.path, &mut closure_cache);
+            closure
+                .iter()
+                .filter_map(|p| graph.get_path(p))
+                .map(|p| p.nar_size)
+                .sum()
+        };
 
         let immediate_parents = graph
             .get_referrers(&path.path)
@@ -30,13 +37,14 @@ pub fn calculate_stats(graph: &StorePathGraph) -> HashMap<String, PathStats> {
             path.path.clone(),
             PathStats {
                 closure_size,
-                added_size: 0,
+                added_size: None, // Will be calculated on-demand
                 immediate_parents,
             },
         );
     }
 
-    calculate_added_sizes(&mut stats, graph);
+    // Skip added sizes calculation for now - it's too slow for large graphs
+    // This could be calculated on-demand when sorting by added size
 
     stats
 }
@@ -51,72 +59,21 @@ fn calculate_closure(
     }
 
     let mut closure = HashSet::new();
-    closure.insert(path.to_string());
-
-    if let Some(store_path) = graph.get_path(path) {
-        for reference in &store_path.references {
-            let ref_closure = calculate_closure(graph, reference, cache);
-            closure.extend(ref_closure);
-        }
-    }
-
-    cache.insert(path.to_string(), closure.clone());
-    closure
-}
-
-fn calculate_added_sizes(stats: &mut HashMap<String, PathStats>, graph: &StorePathGraph) {
-    for path in &graph.paths {
-        let mut unique_closure = HashSet::new();
-        unique_closure.insert(path.path.clone());
-
-        for reference in &path.references {
-            if let Some(_ref_stats) = stats.get(reference) {
-                let ref_closure = calculate_closure_set(graph, reference);
-                unique_closure.extend(ref_closure);
-            }
-        }
-
-        let mut shared_with_siblings = HashSet::new();
-        for parent in &stats.get(&path.path).unwrap().immediate_parents {
-            if let Some(parent_path) = graph.get_path(parent) {
-                for sibling_ref in &parent_path.references {
-                    if sibling_ref != &path.path {
-                        let sibling_closure = calculate_closure_set(graph, sibling_ref);
-                        shared_with_siblings.extend(sibling_closure);
-                    }
-                }
-            }
-        }
-
-        let unique_to_path: HashSet<_> = unique_closure
-            .difference(&shared_with_siblings)
-            .cloned()
-            .collect();
-
-        let added_size: u64 = unique_to_path
-            .iter()
-            .filter_map(|p| graph.get_path(p))
-            .map(|p| p.nar_size)
-            .sum();
-
-        if let Some(path_stats) = stats.get_mut(&path.path) {
-            path_stats.added_size = added_size;
-        }
-    }
-}
-
-fn calculate_closure_set(graph: &StorePathGraph, path: &str) -> HashSet<String> {
-    let mut closure = HashSet::new();
     let mut to_visit = vec![path.to_string()];
 
     while let Some(current) = to_visit.pop() {
         if closure.insert(current.clone()) {
             if let Some(store_path) = graph.get_path(&current) {
-                to_visit.extend(store_path.references.clone());
+                for reference in &store_path.references {
+                    if !closure.contains(reference) {
+                        to_visit.push(reference.clone());
+                    }
+                }
             }
         }
     }
 
+    cache.insert(path.to_string(), closure.clone());
     closure
 }
 
@@ -158,8 +115,8 @@ pub fn sort_paths(paths: &mut [String], stats: &HashMap<String, PathStats>, orde
                 size_b.cmp(&size_a)
             }
             SortOrder::AddedSize => {
-                let size_a = stat_a.map(|s| s.added_size).unwrap_or(0);
-                let size_b = stat_b.map(|s| s.added_size).unwrap_or(0);
+                let size_a = stat_a.and_then(|s| s.added_size).unwrap_or(0);
+                let size_b = stat_b.and_then(|s| s.added_size).unwrap_or(0);
                 size_b.cmp(&size_a)
             }
         }

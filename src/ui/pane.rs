@@ -67,19 +67,15 @@ struct PaneRenderContext<'a> {
     stats: &'a HashMap<String, PathStats>,
 }
 
-fn render_pane(
-    f: &mut Frame,
-    area: Rect,
-    title: &str,
-    ctx: &PaneRenderContext,
-) {
+fn render_pane(f: &mut Frame, area: Rect, title: &str, ctx: &PaneRenderContext) {
     let border_style = if ctx.is_active {
         Style::default().fg(Color::Yellow)
     } else {
         Style::default()
     };
 
-    let list_items: Vec<ListItem> = ctx.items
+    let list_items: Vec<ListItem> = ctx
+        .items
         .iter()
         .enumerate()
         .map(|(idx, path)| {
@@ -90,17 +86,14 @@ fn render_pane(
             let name = store_path.map(|p| p.short_name()).unwrap_or(path.as_str());
 
             let size_str = if let Some(stats) = path_stats {
-                format!(
-                    " ({})",
-                    bytesize::ByteSize(stats.closure_size)
-                )
+                format!(" ({})", bytesize::ByteSize(stats.closure_size))
             } else {
                 String::new()
             };
 
             let signed = store_path
-                .map(|p| if p.is_signed() { " ✓" } else { "" })
-                .unwrap_or("");
+                .map(|p| if p.is_signed() { "✓ " } else { "  " })
+                .unwrap_or("  ");
 
             let style = if is_selected && ctx.is_active {
                 Style::default()
@@ -113,9 +106,9 @@ fn render_pane(
             };
 
             let line = Line::from(vec![
+                Span::styled(signed, Style::default().fg(Color::Cyan)),
                 Span::raw(name),
                 Span::styled(size_str, Style::default().fg(Color::Green)),
-                Span::styled(signed, Style::default().fg(Color::Cyan)),
             ]);
 
             ListItem::new(line).style(style)

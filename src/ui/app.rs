@@ -13,15 +13,7 @@ pub enum Pane {
     Next,
 }
 
-impl Pane {
-    pub fn previous(&self) -> Self {
-        match self {
-            Pane::Previous => Pane::Previous,
-            Pane::Current => Pane::Previous,
-            Pane::Next => Pane::Current,
-        }
-    }
-}
+impl Pane {}
 
 pub struct App {
     pub graph: StorePathGraph,
@@ -41,6 +33,9 @@ pub struct App {
     pub next_items: Vec<String>,
 
     pub current_path: Option<String>,
+
+    // Navigation history: (items, selected_index)
+    navigation_history: Vec<(Vec<String>, Option<usize>)>,
 }
 
 impl App {
@@ -60,8 +55,10 @@ impl App {
             current_items: Vec::new(),
             next_items: Vec::new(),
             current_path: None,
+            navigation_history: Vec::new(),
         };
 
+        // Start with all roots in the current pane
         app.current_items = app.graph.roots.clone();
         crate::path_stats::sort_paths(&mut app.current_items, &app.stats, app.sort_order);
 
@@ -109,7 +106,8 @@ impl App {
             KeyCode::Down | KeyCode::Char('j') => self.move_down(),
             KeyCode::Up | KeyCode::Char('k') => self.move_up(),
             KeyCode::Left | KeyCode::Char('h') => self.move_left(),
-            KeyCode::Right | KeyCode::Char('l') | KeyCode::Enter => self.move_right(),
+            KeyCode::Right | KeyCode::Char('l') => self.move_right(),
+            KeyCode::Enter => self.select_item(),
             _ => {}
         }
 
@@ -117,108 +115,98 @@ impl App {
     }
 
     fn move_down(&mut self) {
-        let state = match self.active_pane {
-            Pane::Previous => &mut self.previous_state,
-            Pane::Current => &mut self.current_state,
-            Pane::Next => &mut self.next_state,
-        };
-
-        let items = match self.active_pane {
-            Pane::Previous => &self.previous_items,
-            Pane::Current => &self.current_items,
-            Pane::Next => &self.next_items,
-        };
-
+        // Navigate items in the current pane
+        let items = &self.current_items;
         if !items.is_empty() {
-            let i = match state.selected() {
+            let i = match self.current_state.selected() {
                 Some(i) => (i + 1).min(items.len() - 1),
                 None => 0,
             };
-            state.select(Some(i));
+            self.current_state.select(Some(i));
             self.update_panes();
         }
     }
 
     fn move_up(&mut self) {
-        let state = match self.active_pane {
-            Pane::Previous => &mut self.previous_state,
-            Pane::Current => &mut self.current_state,
-            Pane::Next => &mut self.next_state,
-        };
-
-        if let Some(i) = state.selected() {
+        // Navigate items in the current pane
+        if let Some(i) = self.current_state.selected() {
             if i > 0 {
-                state.select(Some(i - 1));
+                self.current_state.select(Some(i - 1));
                 self.update_panes();
             }
         }
     }
 
     fn move_left(&mut self) {
-        if self.active_pane != Pane::Previous {
-            self.active_pane = self.active_pane.previous();
+        // Go back in navigation history
+        if let Some((items, selected_idx)) = self.navigation_history.pop() {
+            self.current_items = items;
+            self.current_state = ListState::default();
+            if let Some(idx) = selected_idx {
+                self.current_state.select(Some(idx));
+            }
+            self.update_panes();
         }
     }
 
     fn move_right(&mut self) {
-        if self.active_pane == Pane::Current && self.current_state.selected().is_some() {
-            if !self.next_items.is_empty() {
-                self.active_pane = Pane::Next;
-                if self.next_state.selected().is_none() {
-                    self.next_state.select(Some(0));
-                }
-            }
-        } else if self.active_pane == Pane::Previous && self.previous_state.selected().is_some() {
-            self.active_pane = Pane::Current;
+        // Ranger-style: move all dependencies to current pane
+        if !self.next_items.is_empty() {
+            // Save current state to history
+            let current_selection = self.current_state.selected();
+            self.navigation_history
+                .push((self.current_items.clone(), current_selection));
+
+            // Move all dependencies to become the new current items
+            self.current_items = self.next_items.clone();
+            self.current_state.select(Some(0));
+            self.update_panes();
         }
     }
 
-    fn update_panes(&mut self) {
-        let selected_path = match self.active_pane {
-            Pane::Previous => self
-                .previous_state
-                .selected()
-                .and_then(|i| self.previous_items.get(i))
-                .cloned(),
-            Pane::Current => self
-                .current_state
-                .selected()
-                .and_then(|i| self.current_items.get(i))
-                .cloned(),
-            Pane::Next => self
-                .next_state
-                .selected()
-                .and_then(|i| self.next_items.get(i))
-                .cloned(),
-        };
+    fn select_item(&mut self) {
+        // Enter key behavior: update the panes based on selected item
+        self.update_panes();
+    }
 
-        if let Some(path) = selected_path {
+    fn update_panes(&mut self) {
+        // Use the selected item in current_items as the focus
+        let selected_idx = self.current_state.selected().unwrap_or(0);
+        if let Some(path) = self.current_items.get(selected_idx) {
             self.current_path = Some(path.clone());
 
-            if self.active_pane == Pane::Current {
-                self.previous_items = self
-                    .stats
-                    .get(&path)
-                    .map(|s| s.immediate_parents.clone())
-                    .unwrap_or_default();
-                crate::path_stats::sort_paths(
-                    &mut self.previous_items,
-                    &self.stats,
-                    self.sort_order,
-                );
+            // Update referrers (left pane)
+            self.previous_items = self
+                .stats
+                .get(path)
+                .map(|s| s.immediate_parents.clone())
+                .unwrap_or_default();
+            crate::path_stats::sort_paths(&mut self.previous_items, &self.stats, self.sort_order);
 
-                let mut refs = self
-                    .graph
-                    .get_references(&path)
-                    .into_iter()
-                    .map(|p| p.path.clone())
-                    .collect::<Vec<_>>();
-                crate::path_stats::sort_paths(&mut refs, &self.stats, self.sort_order);
-                self.next_items = refs;
+            // Update dependencies (right pane)
+            let mut refs = self
+                .graph
+                .get_references(path)
+                .into_iter()
+                .map(|p| p.path.clone())
+                .collect::<Vec<_>>();
+            crate::path_stats::sort_paths(&mut refs, &self.stats, self.sort_order);
+            self.next_items = refs;
 
-                self.previous_state = ListState::default();
-                self.next_state = ListState::default();
+            // Reset selections in side panes but keep current pane focus
+            self.previous_state = ListState::default();
+            self.next_state = ListState::default();
+
+            // Select first item in each pane if available
+            if !self.previous_items.is_empty() {
+                self.previous_state.select(Some(0));
             }
+            if !self.next_items.is_empty() {
+                self.next_state.select(Some(0));
+            }
+
+            // Always keep focus on current pane
+            self.active_pane = Pane::Current;
         }
     }
 

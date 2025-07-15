@@ -1,7 +1,6 @@
 use anyhow::{Result, bail};
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Config {
     pub paths: Vec<String>,
     pub derivation: bool,
@@ -9,7 +8,6 @@ pub struct Config {
     pub help: bool,
     pub version: bool,
 }
-
 
 pub fn parse_args() -> Result<Config> {
     let args: Vec<String> = std::env::args().collect();
