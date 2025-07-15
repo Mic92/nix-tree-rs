@@ -29,7 +29,7 @@ async fn test_initial_dependencies_loading() {
         println!("Root has {} references", root_path.references.len());
         println!("First few references:");
         for (i, reference) in root_path.references.iter().take(5).enumerate() {
-            println!("  {}: {}", i, reference);
+            println!("  {i}: {reference}");
         }
     }
 
@@ -47,7 +47,7 @@ async fn test_initial_dependencies_loading() {
     } else {
         println!("  First few dependencies:");
         for (i, dep) in app.next_items.iter().take(5).enumerate() {
-            println!("    {}: {}", i, dep);
+            println!("    {i}: {dep}");
         }
     }
 
@@ -325,14 +325,14 @@ fn test_update_panes_logic() {
         buffer_text.push('\n');
     }
     println!("\nStatus bar for dep1:");
-    println!("{}", buffer_text);
+    println!("{buffer_text}");
 
-    // Check that the status bar contains the expected added size (600 B)
-    // dep1's added size should be: dep1 (500) + dep1-only (100) = 600
-    // (shared is not counted as it's also referenced by root and dep2)
+    // Check that the status bar contains the expected added size
+    // dep1's added size in the context of the root should be 600 B
+    // (dep1 itself: 500 B + dep1-only: 100 B)
     assert!(
         buffer_text.contains("Added Size: 600 B"),
-        "dep1 should show added size of 600 B"
+        "dep1 should show added size of 600 B in current context"
     );
 
     // Select dep2 and check its added size
@@ -361,13 +361,14 @@ fn test_update_panes_logic() {
         buffer_text.push('\n');
     }
     println!("\nStatus bar for dep2:");
-    println!("{}", buffer_text);
+    println!("{buffer_text}");
 
-    // Check that the status bar contains the expected added size (450 B)
-    // dep2's added size should be: dep2 (300) + dep2-only (150) = 450
+    // Check that the status bar contains the expected added size
+    // dep2's added size in the context of the root should be 450 B
+    // (dep2 itself: 300 B + dep2-only: 150 B)
     assert!(
         buffer_text.contains("Added Size: 450 B"),
-        "dep2 should show added size of 450 B"
+        "dep2 should show added size of 450 B in current context"
     );
 
     // Select shared and check its added size
@@ -396,12 +397,13 @@ fn test_update_panes_logic() {
         buffer_text.push('\n');
     }
     println!("\nStatus bar for shared:");
-    println!("{}", buffer_text);
+    println!("{buffer_text}");
 
-    // Check that the status bar contains the expected added size (0 B)
-    // shared's added size should be 0 (referenced by multiple siblings)
+    // Check that the status bar contains the expected added size
+    // shared's added size in the context of the root should be 200 B
+    // (just itself, since it has no dependencies)
     assert!(
-        buffer_text.contains("Added Size: 0 B"),
-        "shared should show added size of 0 B"
+        buffer_text.contains("Added Size: 200 B"),
+        "shared should show added size of 200 B in current context"
     );
 }

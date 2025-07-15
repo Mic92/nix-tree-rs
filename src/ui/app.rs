@@ -35,10 +35,28 @@ pub struct App {
     pub current_path: Option<String>,
 
     // Navigation history: (items, selected_index)
-    navigation_history: Vec<(Vec<String>, Option<usize>)>,
+    pub navigation_history: Vec<(Vec<String>, Option<usize>)>,
 }
 
 impl App {
+    pub fn get_parent_context(&self) -> Vec<String> {
+        // Get the parent context from navigation history
+        // For added size calculation, we need the specific parent we navigated from
+        if let Some((parent_items, selected_idx)) = self.navigation_history.last() {
+            // If we have a selected parent, use only that as the context
+            if let Some(idx) = selected_idx {
+                if let Some(parent) = parent_items.get(*idx) {
+                    return vec![parent.clone()];
+                }
+            }
+            // Fallback to all parent items
+            parent_items.clone()
+        } else {
+            // If no history, use the original roots
+            self.graph.roots.clone()
+        }
+    }
+
     pub fn new(graph: StorePathGraph, stats: HashMap<String, PathStats>) -> Self {
         let mut app = Self {
             graph,

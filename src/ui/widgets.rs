@@ -5,9 +5,8 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use crate::path_stats::PathStats;
 use crate::store_path::StorePathGraph;
 use crate::ui::app::App;
 
@@ -80,8 +79,11 @@ pub fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
                 match s.added_size {
                     Some(size) => bytesize::ByteSize(size),
                     None => {
-                        // Calculate it now
-                        let added = calculate_added_size_for_path(path, &app.graph, &app.stats);
+                        // Calculate it now using the nix-tree algorithm
+                        // Use parent context for calculating added sizes
+                        let parent_context = app.get_parent_context();
+                        let added =
+                            calculate_added_size_for_path(path, &app.graph, &parent_context);
                         bytesize::ByteSize(added)
                     }
                 }
@@ -129,7 +131,7 @@ pub fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
 
             let parents_line = if parents_count > 0 {
                 Line::from(vec![
-                    Span::raw(format!("Immediate Parents ({}): ", parents_count)),
+                    Span::raw(format!("Immediate Parents ({parents_count}): ")),
                     Span::styled(parents_preview, Style::default().fg(Color::Blue)),
                 ])
             } else {
@@ -160,47 +162,54 @@ pub fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
 fn calculate_added_size_for_path(
     path: &str,
     graph: &StorePathGraph,
-    stats: &HashMap<String, PathStats>,
+    context_roots: &[String],
 ) -> u64 {
-    // Quick calculation of added size for a single path
-    let Some(_store_path) = graph.get_path(path) else {
-        return 0;
-    };
+    // Following the original nix-tree logic:
+    // addedSize = totalSize - filteredSize
+    // where filteredSize = size of closure of (contextRoots - currentPath)
 
-    // Build closure for this path
-    let mut closure = HashSet::new();
-    let mut to_visit = vec![path.to_string()];
-
-    while let Some(current) = to_visit.pop() {
-        if closure.insert(current.clone()) {
-            if let Some(sp) = graph.get_path(&current) {
-                for reference in &sp.references {
-                    if !closure.contains(reference) {
-                        to_visit.push(reference.clone());
+    // First, we need to calculate the total size of the current context
+    // This is the closure of all items in the current view
+    let mut context_closure = HashSet::new();
+    for root in context_roots {
+        let mut to_visit = vec![root.clone()];
+        while let Some(current) = to_visit.pop() {
+            if context_closure.insert(current.clone()) {
+                if let Some(sp) = graph.get_path(&current) {
+                    for reference in &sp.references {
+                        if !context_closure.contains(reference) {
+                            to_visit.push(reference.clone());
+                        }
                     }
                 }
             }
         }
     }
 
-    // Get all siblings that share the same parents
-    let mut shared_with_siblings = HashSet::new();
-    if let Some(path_stats) = stats.get(path) {
-        for parent in &path_stats.immediate_parents {
-            if let Some(parent_path) = graph.get_path(parent) {
-                for sibling_ref in &parent_path.references {
-                    if sibling_ref != path {
-                        // Add sibling's closure
-                        let mut sibling_to_visit = vec![sibling_ref.clone()];
-                        while let Some(current) = sibling_to_visit.pop() {
-                            if shared_with_siblings.insert(current.clone()) {
-                                if let Some(sp) = graph.get_path(&current) {
-                                    for reference in &sp.references {
-                                        if !shared_with_siblings.contains(reference) {
-                                            sibling_to_visit.push(reference.clone());
-                                        }
-                                    }
-                                }
+    let context_total_size: u64 = context_closure
+        .iter()
+        .filter_map(|p| graph.get_path(p))
+        .map(|p| p.nar_size)
+        .sum();
+
+    // Build closure of all context roots, excluding current path and its descendants
+    let mut filtered_closure = HashSet::new();
+
+    for root in context_roots {
+        // Skip current path when building the filtered closure
+        if root != path {
+            let mut to_visit = vec![root.clone()];
+            while let Some(current) = to_visit.pop() {
+                // Skip the target path completely - don't add it or traverse its children
+                if current == path {
+                    continue;
+                }
+
+                if filtered_closure.insert(current.clone()) {
+                    if let Some(sp) = graph.get_path(&current) {
+                        for reference in &sp.references {
+                            if !filtered_closure.contains(reference) && reference != path {
+                                to_visit.push(reference.clone());
                             }
                         }
                     }
@@ -209,14 +218,15 @@ fn calculate_added_size_for_path(
         }
     }
 
-    // Calculate unique size
-    let unique_to_path: HashSet<_> = closure.difference(&shared_with_siblings).cloned().collect();
-
-    unique_to_path
+    // Calculate size of the filtered closure
+    let filtered_size: u64 = filtered_closure
         .iter()
         .filter_map(|p| graph.get_path(p))
         .map(|p| p.nar_size)
-        .sum()
+        .sum();
+
+    // Added size is context total minus filtered
+    context_total_size.saturating_sub(filtered_size)
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

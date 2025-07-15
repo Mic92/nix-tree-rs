@@ -44,7 +44,7 @@ pub fn calculate_stats(graph: &StorePathGraph) -> HashMap<String, PathStats> {
     }
 
     // Skip added sizes calculation for now - it's too slow for large graphs
-    // This could be calculated on-demand when sorting by added size
+    // This will be calculated on-demand when displaying in the UI
 
     stats
 }
