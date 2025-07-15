@@ -122,3 +122,107 @@ pub fn sort_paths(paths: &mut [String], stats: &HashMap<String, PathStats>, orde
         }
     });
 }
+
+// Trie-like structure for efficient path storage
+#[derive(Debug, Clone)]
+struct Treeish {
+    node: String,
+    children: Vec<Treeish>,
+}
+
+impl Treeish {
+    fn new(node: String) -> Self {
+        Treeish {
+            node,
+            children: Vec::new(),
+        }
+    }
+
+    fn with_children(node: String, children: Vec<Treeish>) -> Self {
+        Treeish { node, children }
+    }
+
+    // Convert Treeish to paths
+    fn to_paths(&self) -> Vec<Vec<String>> {
+        if self.children.is_empty() {
+            vec![vec![self.node.clone()]]
+        } else {
+            let mut paths = Vec::new();
+            for child in &self.children {
+                for mut path in child.to_paths() {
+                    path.insert(0, self.node.clone());
+                    paths.push(path);
+                }
+            }
+            paths
+        }
+    }
+}
+
+/// Find all paths from roots to the target path using bottom-up approach
+pub fn why_depends(graph: &StorePathGraph, target: &str) -> Vec<Vec<String>> {
+    // Early exit if target is not in the graph
+    if graph.get_path(target).is_none() {
+        return Vec::new();
+    }
+
+    // Memoization cache
+    let mut cache: HashMap<String, Option<Treeish>> = HashMap::new();
+
+    // Bottom-up traversal to build Treeish
+    fn build_treeish(
+        graph: &StorePathGraph,
+        node: &str,
+        target: &str,
+        cache: &mut HashMap<String, Option<Treeish>>,
+        visited: &mut HashSet<String>,
+    ) -> Option<Treeish> {
+        // Check cache first
+        if let Some(cached) = cache.get(node) {
+            return cached.clone();
+        }
+
+        // Prevent cycles
+        if !visited.insert(node.to_string()) {
+            return None;
+        }
+
+        let result = if node == target {
+            Some(Treeish::new(node.to_string()))
+        } else if let Some(store_path) = graph.get_path(node) {
+            let mut child_trees = Vec::new();
+
+            for reference in &store_path.references {
+                if let Some(tree) = build_treeish(graph, reference, target, cache, visited) {
+                    child_trees.push(tree);
+                }
+            }
+
+            if child_trees.is_empty() {
+                None
+            } else {
+                Some(Treeish::with_children(node.to_string(), child_trees))
+            }
+        } else {
+            None
+        };
+
+        visited.remove(node);
+        cache.insert(node.to_string(), result.clone());
+        result
+    }
+
+    // Build trees from roots
+    let mut all_paths = Vec::new();
+    for root in &graph.roots {
+        let mut visited = HashSet::new();
+        if let Some(tree) = build_treeish(graph, root, target, &mut cache, &mut visited) {
+            let paths = tree.to_paths();
+            all_paths.extend(paths);
+        }
+    }
+
+    // Limit output (no sorting, to match Haskell implementation)
+    all_paths.truncate(1000);
+    all_paths
+}

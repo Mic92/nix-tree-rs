@@ -1,14 +1,14 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Rect},
-    style::{Color, Style},
+    layout::{Alignment, Constraint, Margin, Rect},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 use std::collections::HashSet;
 
 use crate::store_path::StorePathGraph;
-use crate::ui::app::App;
+use crate::ui::app::{App, Modal};
 
 pub fn render_help(f: &mut Frame, area: Rect) {
     let help_text = vec![
@@ -23,6 +23,7 @@ pub fn render_help(f: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from("Actions:"),
         Line::from("  /       Search"),
+        Line::from("  w       Show why-depends (use h/l to scroll horizontally)"),
         Line::from("  s       Change sort order"),
         Line::from("  ?       Toggle this help"),
         Line::from("  q/Esc   Quit"),
@@ -227,6 +228,128 @@ fn calculate_added_size_for_path(
 
     // Added size is context total minus filtered
     context_total_size.saturating_sub(filtered_size)
+}
+
+pub fn render_why_depends(
+    f: &mut Frame,
+    area: Rect,
+    formatted_lines: &[String],
+    max_line_width: usize,
+    selected: usize,
+    vertical_scroll_state: &mut ScrollbarState,
+    horizontal_scroll_state: &mut ScrollbarState,
+    horizontal_scroll: usize,
+) {
+    let modal_area = centered_rect(90, 60, area);
+
+    // Clear with black background
+    f.render_widget(Clear, modal_area);
+
+    let block = Block::default()
+        .title("Why Depends - Shows paths from roots to selected package")
+        .borders(Borders::ALL);
+
+    let inner_area = block.inner(modal_area);
+    f.render_widget(block, modal_area);
+
+    // Calculate visible window
+    let visible_height = inner_area.height as usize;
+
+    // Calculate scroll offset to keep selected item visible
+    let scroll_offset = if selected >= visible_height {
+        selected.saturating_sub(visible_height / 2)
+    } else {
+        0
+    };
+
+    // Build visible lines
+    let visible_lines = formatted_lines
+        .iter()
+        .enumerate()
+        .skip(scroll_offset)
+        .take(visible_height)
+        .map(|(i, text)| {
+            let style = if i == selected {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+
+            // Apply horizontal scroll by slicing the text
+            let text_to_show = if horizontal_scroll < text.len() {
+                &text[horizontal_scroll..]
+            } else {
+                ""
+            };
+
+            Line::from(text_to_show).style(style)
+        })
+        .collect::<Vec<_>>();
+
+    // Create paragraph
+    let paragraph = Paragraph::new(visible_lines);
+    f.render_widget(paragraph, inner_area);
+
+    // Render vertical scrollbar
+    let vertical_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+
+    f.render_stateful_widget(
+        vertical_scrollbar,
+        inner_area.inner(Margin {
+            vertical: 1,
+            horizontal: 0,
+        }),
+        vertical_scroll_state,
+    );
+
+    // Render horizontal scrollbar if content is wider than view
+    if max_line_width > inner_area.width as usize {
+        let horizontal_scrollbar = Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
+            .begin_symbol(Some("←"))
+            .end_symbol(Some("→"));
+
+        f.render_stateful_widget(
+            horizontal_scrollbar,
+            inner_area.inner(Margin {
+                vertical: 0,
+                horizontal: 1,
+            }),
+            horizontal_scroll_state,
+        );
+    }
+}
+
+pub fn render_modal(f: &mut Frame, app: &App, area: Rect) {
+    if let Some(modal) = &app.modal {
+        match modal {
+            Modal::WhyDepends {
+                paths: _,
+                formatted_lines,
+                max_line_width,
+                selected,
+                vertical_scroll_state,
+                horizontal_scroll_state,
+                horizontal_scroll,
+            } => {
+                // Clone the states since we can't mutate them here
+                let mut v_state = vertical_scroll_state.clone();
+                let mut h_state = horizontal_scroll_state.clone();
+
+                render_why_depends(
+                    f,
+                    area,
+                    formatted_lines,
+                    *max_line_width,
+                    *selected,
+                    &mut v_state,
+                    &mut h_state,
+                    *horizontal_scroll,
+                );
+            }
+        }
+    }
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

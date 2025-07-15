@@ -16,6 +16,7 @@ use ratatui::{
     layout::{Constraint, Layout},
 };
 use std::io;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -100,11 +101,18 @@ async fn run_app(
             if app.searching {
                 ui::widgets::render_search(f, f.area(), &app.search_query);
             }
+
+            // Render modal on top
+            ui::widgets::render_modal(f, &app, f.area());
         })?;
 
-        if let Event::Key(key) = event::read()? {
-            if app.handle_key(key)? {
-                break;
+        // Use event polling with timeout to prevent overwhelming the UI with key repeats
+        if event::poll(Duration::from_millis(16))? {
+            // ~60 FPS
+            if let Event::Key(key) = event::read()? {
+                if app.handle_key(key)? {
+                    break;
+                }
             }
         }
     }

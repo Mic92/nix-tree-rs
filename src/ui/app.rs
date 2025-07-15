@@ -15,6 +15,18 @@ pub enum Pane {
 
 impl Pane {}
 
+pub enum Modal {
+    WhyDepends {
+        paths: Vec<Vec<String>>,
+        formatted_lines: Vec<String>,
+        max_line_width: usize,
+        selected: usize,
+        vertical_scroll_state: ratatui::widgets::ScrollbarState,
+        horizontal_scroll_state: ratatui::widgets::ScrollbarState,
+        horizontal_scroll: usize,
+    },
+}
+
 pub struct App {
     pub graph: StorePathGraph,
     pub stats: HashMap<String, PathStats>,
@@ -36,6 +48,8 @@ pub struct App {
 
     // Navigation history: (items, selected_index)
     pub navigation_history: Vec<(Vec<String>, Option<usize>)>,
+
+    pub modal: Option<Modal>,
 }
 
 impl App {
@@ -74,6 +88,7 @@ impl App {
             next_items: Vec::new(),
             current_path: None,
             navigation_history: Vec::new(),
+            modal: None,
         };
 
         // Start with all roots in the current pane
@@ -89,6 +104,68 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<bool> {
+        // Handle modal first
+        if let Some(modal) = &mut self.modal {
+            match modal {
+                Modal::WhyDepends {
+                    paths,
+                    formatted_lines,
+                    max_line_width: _,
+                    selected,
+                    vertical_scroll_state,
+                    horizontal_scroll_state,
+                    horizontal_scroll,
+                } => {
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => {
+                            self.modal = None;
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if *selected < formatted_lines.len() - 1 {
+                                *selected += 1;
+                                *vertical_scroll_state = vertical_scroll_state.position(*selected);
+                            }
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            if *selected > 0 {
+                                *selected -= 1;
+                                *vertical_scroll_state = vertical_scroll_state.position(*selected);
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if let Some(path) = paths.get(*selected).cloned() {
+                                self.modal = None;
+                                self.select_path_from_why_depends(path);
+                                return Ok(false);
+                            }
+                        }
+                        KeyCode::Left | KeyCode::Char('h') => {
+                            *horizontal_scroll = horizontal_scroll.saturating_sub(5);
+                            *horizontal_scroll_state =
+                                horizontal_scroll_state.position(*horizontal_scroll);
+                        }
+                        KeyCode::Right | KeyCode::Char('l') => {
+                            *horizontal_scroll = horizontal_scroll.saturating_add(5);
+                            *horizontal_scroll_state =
+                                horizontal_scroll_state.position(*horizontal_scroll);
+                        }
+                        KeyCode::PageDown => {
+                            let page_size = 10; // Adjust based on your modal height
+                            *selected = (*selected + page_size).min(formatted_lines.len() - 1);
+                            *vertical_scroll_state = vertical_scroll_state.position(*selected);
+                        }
+                        KeyCode::PageUp => {
+                            let page_size = 10;
+                            *selected = selected.saturating_sub(page_size);
+                            *vertical_scroll_state = vertical_scroll_state.position(*selected);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            return Ok(false);
+        }
+
         if self.searching {
             match key.code {
                 KeyCode::Esc => {
@@ -117,6 +194,7 @@ impl App {
                 self.searching = true;
                 self.search_query.clear();
             }
+            KeyCode::Char('w') => self.show_why_depends(),
             KeyCode::Char('s') => {
                 self.sort_order = self.sort_order.next();
                 self.resort_current_pane();
@@ -254,6 +332,71 @@ impl App {
             self.current_state.select(Some(0));
             self.active_pane = Pane::Current;
             self.update_panes();
+        }
+    }
+
+    fn show_why_depends(&mut self) {
+        if let Some(path) = &self.current_path {
+            let paths = crate::path_stats::why_depends(&self.graph, path);
+            if !paths.is_empty() {
+                // Pre-format all lines to avoid recomputing on every render
+                let mut formatted_lines = Vec::new();
+                let mut max_line_width = 0;
+
+                for path in &paths {
+                    let text = path
+                        .iter()
+                        .map(|p| {
+                            // Extract short name from path
+                            p.split('-').skip(1).collect::<Vec<_>>().join("-")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" → ");
+
+                    max_line_width = max_line_width.max(text.len());
+                    formatted_lines.push(text);
+                }
+
+                let vertical_scroll_state = ratatui::widgets::ScrollbarState::default()
+                    .content_length(formatted_lines.len())
+                    .position(0);
+
+                let horizontal_scroll_state =
+                    ratatui::widgets::ScrollbarState::default().content_length(max_line_width);
+
+                self.modal = Some(Modal::WhyDepends {
+                    paths,
+                    formatted_lines,
+                    max_line_width,
+                    selected: 0,
+                    vertical_scroll_state,
+                    horizontal_scroll_state,
+                    horizontal_scroll: 0,
+                });
+            }
+        }
+    }
+
+    fn select_path_from_why_depends(&mut self, path: Vec<String>) {
+        // Clear navigation history
+        self.navigation_history.clear();
+
+        // Start from roots
+        self.current_items = self.graph.roots.clone();
+        crate::path_stats::sort_paths(&mut self.current_items, &self.stats, self.sort_order);
+
+        // Navigate through the path
+        for (i, target) in path.iter().enumerate() {
+            // Find the target in current items
+            if let Some(idx) = self.current_items.iter().position(|p| p == target) {
+                self.current_state.select(Some(idx));
+                self.update_panes();
+
+                // If not the last item, move right to continue navigation
+                if i < path.len() - 1 {
+                    self.move_right();
+                }
+            }
         }
     }
 }
