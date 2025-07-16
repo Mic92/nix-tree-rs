@@ -12,6 +12,8 @@ struct NixPathInfo {
     nar_hash: Option<String>,
     #[serde(rename = "narSize")]
     nar_size: u64,
+    #[serde(rename = "path")]
+    path: String,
     references: Vec<String>,
     signatures: Option<Vec<String>>,
     #[serde(rename = "closureSize")]
@@ -56,8 +58,21 @@ async fn resolve_paths(
     }
 
     let json_str = String::from_utf8(output.stdout).context("Invalid UTF-8 in nix output")?;
-    let path_info_map: std::collections::HashMap<String, NixPathInfo> =
-        serde_json::from_str(&json_str).context("Failed to parse nix path-info JSON")?;
+    let path_info_map: std::collections::HashMap<String, NixPathInfo> = match serde_json::from_str(&json_str) {
+        Ok(map) => map,
+        Err(_) => {
+            let list: Vec<NixPathInfo> = serde_json::from_str(&json_str)
+                .context("Failed to parse nix path-info JSON as both object and array")?;
+            let map: std::collections::HashMap<String, NixPathInfo> = list
+                .into_iter()
+                .filter_map(|info| {
+                    let path = info.path.clone();
+                    Some((path, info))
+                })
+                .collect();
+            map
+        }
+    };
 
     // Return the resolved store paths
     Ok(path_info_map.keys().cloned().collect())
@@ -113,8 +128,21 @@ pub async fn query_path_info(
 
     let json_str = String::from_utf8(output.stdout).context("Invalid UTF-8 in nix output")?;
 
-    let path_info_map: std::collections::HashMap<String, NixPathInfo> =
-        serde_json::from_str(&json_str).context("Failed to parse nix path-info JSON")?;
+    let path_info_map: std::collections::HashMap<String, NixPathInfo> = match serde_json::from_str(&json_str) {
+        Ok(map) => map,
+        Err(_) => {
+            let list: Vec<NixPathInfo> = serde_json::from_str(&json_str)
+                .context("Failed to parse nix path-info JSON as both object and array")?;
+            let map: std::collections::HashMap<String, NixPathInfo> = list
+                .into_iter()
+                .filter_map(|info| {
+                    let path = info.path.clone();
+                    Some((path, info))
+                })
+                .collect();
+            map
+        }
+    };
 
     let mut graph = StorePathGraph::new();
 
