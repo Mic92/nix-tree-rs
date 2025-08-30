@@ -19,7 +19,7 @@ A Rust port of [nix-tree](https://github.com/utdemir/nix-tree), providing an int
 ## Installation
 
 ```bash
-nix run github:joerg/nix-tree-rs
+nix run github:Mic92/nix-tree-rs
 ```
 
 ## Usage
