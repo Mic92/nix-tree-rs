@@ -15,7 +15,7 @@
 
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
 
-      perSystem = { config, self', inputs', pkgs, system, ... }: {
+      perSystem = { config, self', inputs', pkgs, system, lib, ... }: {
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "nix-tree";
           version = "0.1.0";
@@ -70,6 +70,12 @@
             rustfmt.enable = true;
           };
         };
+
+        checks =
+          {
+            package-default = self'.packages.default;
+            devShell-default = self'.devShells.default;
+          };
       };
     };
 }
