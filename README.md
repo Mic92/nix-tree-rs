@@ -8,18 +8,18 @@ A Rust port of [nix-tree](https://github.com/utdemir/nix-tree), providing an int
 
 ## Features
 
-- 🌳 **Interactive Navigation**: Three-pane interface showing referrers, current selection, and dependencies
-- 📊 **Size Analysis**: View NAR size, closure size, and added size for each package
-- 🔍 **Search**: Find packages by name within the dependency tree
-- 📈 **Why-Depends**: Discover all paths from GC roots to a specific package
-- 🔤 **Multiple Sort Orders**: Sort by name, closure size, or added size
-- ✓ **Signature Verification**: See which packages are signed
-- ⌨️ **Vim-like Keybindings**: Familiar navigation for vim users
+- **Interactive Navigation**: Three-pane interface showing referrers, current selection, and dependencies
+- **Size Analysis**: View NAR size, closure size, and added size for each package
+- **Search**: Find packages by name within the dependency tree
+- **Why-Depends**: Discover all paths from GC roots to a specific package
+- **Multiple Sort Orders**: Sort by name, closure size, or added size
+- **Signature Verification**: See which packages are signed
+- **Vim-like Keybindings**: Familiar navigation for vim users
 
 ## Installation
 
 ```bash
-nix run github:joerg/nix-tree-rs
+nix run github:Mic92/nix-tree-rs
 ```
 
 ## Usage
