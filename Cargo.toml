@@ -8,7 +8,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 anyhow = "1.0"
-bytesize = "2.3.0"
+bytesize = "2.3.1"
 crossterm = "0.29"
 indexmap = "2.12"
 ratatui = "0.29"
