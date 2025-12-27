@@ -11,11 +11,16 @@
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.treefmt-nix.flakeModule
+        inputs.flake-parts.flakeModules.easyOverlay
       ];
 
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
 
       perSystem = { config, self', inputs', pkgs, system, lib, ... }: {
+        overlayAttrs = {
+          nix-tree = config.packages.default;
+        };
+
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "nix-tree";
           version = "0.1.0";
