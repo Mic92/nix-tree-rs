@@ -11,7 +11,7 @@ anyhow = "1.0"
 bytesize = "2.3.1"
 crossterm = "0.29"
 indexmap = "2.12"
-ratatui = "0.29"
+ratatui = "0.30"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.48", features = ["full"] }
