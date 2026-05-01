@@ -32,10 +32,11 @@ pub fn render_panes(f: &mut Frame, app: &App, area: Rect) {
         },
     );
 
+    let title = format!("Current · sort: {}", app.sort_order.as_str());
     render_pane(
         f,
         chunks[1],
-        "Current",
+        &title,
         &PaneRenderContext {
             items: &app.current_items,
             state: &app.current_state,
@@ -74,6 +75,9 @@ fn render_pane(f: &mut Frame, area: Rect, title: &str, ctx: &PaneRenderContext) 
         Style::default()
     };
 
+    let inner_width = area.width.saturating_sub(2) as usize;
+    const SIGN_W: usize = 2;
+
     let list_items: Vec<ListItem> = ctx
         .items
         .iter()
@@ -85,15 +89,20 @@ fn render_pane(f: &mut Frame, area: Rect, title: &str, ctx: &PaneRenderContext) 
 
             let name = store_path.map(|p| p.short_name()).unwrap_or(path.as_str());
 
-            let size_str = if let Some(stats) = path_stats {
-                format!(" ({})", bytesize::ByteSize(stats.closure_size))
-            } else {
-                String::new()
-            };
+            let size_str = path_stats
+                .map(|s| format!("{:>10}", bytesize::ByteSize(s.closure_size)))
+                .unwrap_or_default();
 
             let signed = store_path
                 .map(|p| if p.is_signed() { "✓ " } else { "  " })
                 .unwrap_or("  ");
+
+            // Right-align the size column so magnitudes line up regardless of
+            // name length, truncating the name if the row would overflow.
+            let name_budget = inner_width
+                .saturating_sub(SIGN_W)
+                .saturating_sub(size_str.len() + 1);
+            let (name, pad) = fit_and_pad(name, name_budget);
 
             let style = if is_selected && ctx.is_active {
                 Style::default()
@@ -108,6 +117,7 @@ fn render_pane(f: &mut Frame, area: Rect, title: &str, ctx: &PaneRenderContext) 
             let line = Line::from(vec![
                 Span::styled(signed, Style::default().fg(Color::Cyan)),
                 Span::raw(name),
+                Span::raw(" ".repeat(pad + 1)),
                 Span::styled(size_str, Style::default().fg(Color::Green)),
             ]);
 
@@ -115,12 +125,34 @@ fn render_pane(f: &mut Frame, area: Rect, title: &str, ctx: &PaneRenderContext) 
         })
         .collect();
 
+    let position = ctx
+        .state
+        .selected()
+        .map(|i| format!(" {}/{} ", i + 1, ctx.items.len()))
+        .unwrap_or_default();
+
     let list = List::new(list_items).block(
         Block::default()
             .title(title)
+            .title_bottom(Line::from(position).right_aligned())
             .borders(Borders::ALL)
             .border_style(border_style),
     );
 
     f.render_stateful_widget(list, area, &mut ctx.state.clone());
+}
+
+/// Truncate `s` to at most `budget` columns (appending `…` if cut) and report
+/// remaining columns so the caller can right-align the next span. Store path
+/// names are restricted to ASCII so byte length equals display width here.
+fn fit_and_pad(s: &str, budget: usize) -> (String, usize) {
+    if s.len() <= budget {
+        return (s.to_string(), budget - s.len());
+    }
+    if budget == 0 {
+        return (String::new(), 0);
+    }
+    let mut out: String = s.chars().take(budget - 1).collect();
+    out.push('…');
+    (out, 0)
 }

@@ -93,10 +93,10 @@ ARGUMENTS:
 
 KEYBINDINGS:
     q/Esc               Quit
-    j/Down              Move down
-    k/Up                Move up
-    h/Left              Move to previous pane  
-    l/Right             Move to next pane
+    j/Down k/Up         Move down/up
+    h/Left l/Right      Ascend/descend into dependencies
+    g/Home G/End        Jump to first/last
+    PgUp PgDn           Move by page
     /                   Search
     s                   Change sort order
     ?                   Show help

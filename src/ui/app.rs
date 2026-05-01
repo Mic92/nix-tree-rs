@@ -212,8 +212,12 @@ impl App {
                 self.sort_order = self.sort_order.next();
                 self.resort_current_pane();
             }
-            KeyCode::Down | KeyCode::Char('j') => self.move_down(),
-            KeyCode::Up | KeyCode::Char('k') => self.move_up(),
+            KeyCode::Down | KeyCode::Char('j') => self.move_selection(1),
+            KeyCode::Up | KeyCode::Char('k') => self.move_selection(-1),
+            KeyCode::PageDown => self.move_selection(20),
+            KeyCode::PageUp => self.move_selection(-20),
+            KeyCode::Home | KeyCode::Char('g') => self.move_selection(isize::MIN),
+            KeyCode::End | KeyCode::Char('G') => self.move_selection(isize::MAX),
             KeyCode::Left | KeyCode::Char('h') => self.move_left(),
             KeyCode::Right | KeyCode::Char('l') => self.move_right(),
             KeyCode::Enter => self.select_item(),
@@ -223,26 +227,16 @@ impl App {
         Ok(false)
     }
 
-    fn move_down(&mut self) {
-        // Navigate items in the current pane
-        let items = &self.current_items;
-        if !items.is_empty() {
-            let i = match self.current_state.selected() {
-                Some(i) => (i + 1).min(items.len() - 1),
-                None => 0,
-            };
-            self.current_state.select(Some(i));
-            self.update_panes();
+    fn move_selection(&mut self, delta: isize) {
+        let len = self.current_items.len();
+        if len == 0 {
+            return;
         }
-    }
-
-    fn move_up(&mut self) {
-        // Navigate items in the current pane
-        if let Some(i) = self.current_state.selected() {
-            if i > 0 {
-                self.current_state.select(Some(i - 1));
-                self.update_panes();
-            }
+        let cur = self.current_state.selected().unwrap_or(0) as isize;
+        let new = cur.saturating_add(delta).clamp(0, len as isize - 1) as usize;
+        if self.current_state.selected() != Some(new) {
+            self.current_state.select(Some(new));
+            self.update_panes();
         }
     }
 
