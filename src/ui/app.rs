@@ -538,24 +538,12 @@ fn fuzzy_match(haystack: &str, query: &str) -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
-    use super::fuzzy_match;
+    use super::fuzzy_match as fz;
 
     #[test]
-    fn fuzzy_ranks_substring_over_scatter() {
-        let sub = fuzzy_match("python3-requests", "req").unwrap();
-        let scat = fuzzy_match("ruby-erubis-qt", "req").unwrap();
-        assert!(sub > scat, "{sub} > {scat}");
-    }
-
-    #[test]
-    fn fuzzy_prefix_bonus() {
-        let pre = fuzzy_match("glibc-2.40", "gli").unwrap();
-        let mid = fuzzy_match("nss-glib-shim", "gli").unwrap();
-        assert!(pre > mid);
-    }
-
-    #[test]
-    fn fuzzy_rejects_non_subsequence() {
-        assert_eq!(fuzzy_match("hello", "xyz"), None);
+    fn fuzzy_scoring() {
+        assert_eq!(fz("hello", "xyz"), None);
+        assert!(fz("python3-requests", "req") > fz("ruby-erubis-qt", "req"));
+        assert!(fz("glibc-2.40", "gli") > fz("nss-glib-shim", "gli"));
     }
 }

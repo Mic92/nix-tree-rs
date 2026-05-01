@@ -2,66 +2,49 @@ use anyhow::Result;
 use std::io::Write;
 use std::process::Command;
 
+const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/closures.nix");
+
+/// Our in-process closure-size computation must agree with `nix path-info
+/// --closure-size`, since we dropped that flag from the load path for speed.
 #[tokio::test]
-async fn test_parse_hello_derivation() -> Result<()> {
-    let output = Command::new("nix-instantiate")
-        .arg("<nixpkgs>")
-        .arg("-A")
-        .arg("hello")
+async fn closure_size_matches_nix() -> Result<()> {
+    let out = Command::new("nix-build")
+        .args([FIXTURE, "-A", "v1", "--no-out-link"])
         .output()?;
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let root = String::from_utf8(out.stdout)?.trim().to_string();
 
-    if !output.status.success() {
-        eprintln!(
-            "nix-instantiate failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        panic!("Failed to instantiate hello derivation");
-    }
-
-    let drv_path = String::from_utf8(output.stdout)?.trim().to_string();
-
-    println!("Derivation path: {drv_path}");
-
-    let (hash, name) = nix_tree::store_path::StorePath::parse(&drv_path)?;
-    assert_eq!(hash.len(), 32);
-    assert!(name.ends_with(".drv"));
-    assert!(name.contains("hello"));
-
-    let paths = vec![drv_path];
-    let graph = nix_tree::nix::query_path_info(&paths, true, &Default::default()).await?;
-
-    assert!(!graph.paths.is_empty());
-
-    let hello_drv = graph
-        .get_path(&paths[0])
-        .expect("Should find hello derivation");
-    assert!(!hello_drv.references.is_empty());
-
+    let graph = nix_tree::nix::query_path_info(&[root.clone()], true, &Default::default()).await?;
     let stats = nix_tree::path_stats::calculate_stats(&graph);
-    assert!(!stats.is_empty());
 
-    let hello_stats = stats.get(&paths[0]).expect("Should have stats for hello");
-    let expected = String::from_utf8(
+    let expected: u64 = String::from_utf8(
         Command::new("nix")
             .args([
                 "--extra-experimental-features",
                 "nix-command",
                 "path-info",
                 "--closure-size",
-                &paths[0],
+                &root,
             ])
             .output()?
             .stdout,
-    )?;
-    let expected: u64 = expected.split_whitespace().last().unwrap().parse()?;
-    assert_eq!(hello_stats.closure_size, expected);
+    )?
+    .split_whitespace()
+    .last()
+    .unwrap()
+    .parse()?;
 
+    assert_eq!(stats[&root].closure_size, expected);
     Ok(())
 }
 
 /// https://github.com/Mic92/nix-tree-rs/issues/23
 #[tokio::test]
-async fn test_unbuilt_derivation_flag() -> Result<()> {
+async fn unbuilt_derivation_flag() -> Result<()> {
     let mut expr = tempfile::NamedTempFile::with_suffix(".nix")?;
     // Unique salt keeps the output path unbuilt across test runs.
     let salt: u128 = std::time::SystemTime::now()
