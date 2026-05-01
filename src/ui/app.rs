@@ -417,13 +417,24 @@ impl App {
         }
 
         let query = self.search_query.to_lowercase();
-        let matching_paths: Vec<String> = self
+        let mut scored: Vec<(i32, String)> = self
             .graph
             .paths
             .iter()
-            .filter(|p| p.name.to_lowercase().contains(&query))
-            .map(|p| p.path.clone())
+            .filter_map(|p| {
+                fuzzy_match(&p.name.to_lowercase(), &query).map(|score| (score, p.path.clone()))
+            })
             .collect();
+        // Best match first; ties broken by closure size so the "big thing you
+        // probably meant" floats up when many names share a prefix.
+        scored.sort_by(|a, b| {
+            b.0.cmp(&a.0).then_with(|| {
+                let sa = self.stats.get(&a.1).map_or(0, |s| s.closure_size);
+                let sb = self.stats.get(&b.1).map_or(0, |s| s.closure_size);
+                sb.cmp(&sa)
+            })
+        });
+        let matching_paths: Vec<String> = scored.into_iter().map(|(_, p)| p).collect();
 
         if !matching_paths.is_empty() {
             // Keep relevance order rather than re-sorting by size.
@@ -498,5 +509,53 @@ impl App {
                 }
             }
         }
+    }
+}
+
+/// Case-insensitive subsequence match with a small scoring scheme so contiguous
+/// substrings and prefix hits rank above scattered matches. Returns `None` when
+/// the query is not a subsequence at all. Both inputs are assumed lowercased.
+fn fuzzy_match(haystack: &str, query: &str) -> Option<i32> {
+    if query.is_empty() {
+        return Some(0);
+    }
+    let mut score = 0i32;
+    let mut h = haystack.bytes().enumerate();
+    let mut last: Option<usize> = None;
+    for q in query.bytes() {
+        let (i, _) = h.find(|&(_, b)| b == q)?;
+        score += 1;
+        match last {
+            Some(l) if l + 1 == i => score += 5,
+            Some(l) => score -= (i - l - 1).min(3) as i32,
+            None if i == 0 => score += 10,
+            None => {}
+        }
+        last = Some(i);
+    }
+    Some(score)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fuzzy_match;
+
+    #[test]
+    fn fuzzy_ranks_substring_over_scatter() {
+        let sub = fuzzy_match("python3-requests", "req").unwrap();
+        let scat = fuzzy_match("ruby-erubis-qt", "req").unwrap();
+        assert!(sub > scat, "{sub} > {scat}");
+    }
+
+    #[test]
+    fn fuzzy_prefix_bonus() {
+        let pre = fuzzy_match("glibc-2.40", "gli").unwrap();
+        let mid = fuzzy_match("nss-glib-shim", "gli").unwrap();
+        assert!(pre > mid);
+    }
+
+    #[test]
+    fn fuzzy_rejects_non_subsequence() {
+        assert_eq!(fuzzy_match("hello", "xyz"), None);
     }
 }
