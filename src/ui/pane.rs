@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem},
 };
 
-use crate::path_stats::PathStats;
+use crate::path_stats::{PathStats, SortOrder};
 use crate::store_path::StorePathGraph;
 use crate::ui::app::{App, Pane};
 use std::collections::HashMap;
@@ -25,10 +25,12 @@ pub fn render_panes(f: &mut Frame, app: &App, area: Rect) {
         "Referrers",
         &PaneRenderContext {
             items: &app.previous_items,
+            added: &app.previous_added,
             state: &app.previous_state,
             is_active: app.active_pane == Pane::Previous,
             graph: &app.graph,
             stats: &app.stats,
+            sort_order: app.sort_order,
         },
     );
 
@@ -39,10 +41,12 @@ pub fn render_panes(f: &mut Frame, app: &App, area: Rect) {
         &title,
         &PaneRenderContext {
             items: &app.current_items,
+            added: &app.current_added,
             state: &app.current_state,
             is_active: app.active_pane == Pane::Current,
             graph: &app.graph,
             stats: &app.stats,
+            sort_order: app.sort_order,
         },
     );
 
@@ -52,20 +56,24 @@ pub fn render_panes(f: &mut Frame, app: &App, area: Rect) {
         "Dependencies",
         &PaneRenderContext {
             items: &app.next_items,
+            added: &app.next_added,
             state: &app.next_state,
             is_active: app.active_pane == Pane::Next,
             graph: &app.graph,
             stats: &app.stats,
+            sort_order: app.sort_order,
         },
     );
 }
 
 struct PaneRenderContext<'a> {
     items: &'a [String],
+    added: &'a HashMap<String, u64>,
     state: &'a ratatui::widgets::ListState,
     is_active: bool,
     graph: &'a StorePathGraph,
     stats: &'a HashMap<String, PathStats>,
+    sort_order: SortOrder,
 }
 
 fn render_pane(f: &mut Frame, area: Rect, title: &str, ctx: &PaneRenderContext) {
@@ -89,8 +97,14 @@ fn render_pane(f: &mut Frame, area: Rect, title: &str, ctx: &PaneRenderContext) 
 
             let name = store_path.map(|p| p.short_name()).unwrap_or(path.as_str());
 
-            let size_str = path_stats
-                .map(|s| format!("{:>10}", bytesize::ByteSize(s.closure_size)))
+            let size = if ctx.sort_order == SortOrder::AddedSize {
+                ctx.added.get(path).copied()
+            } else {
+                None
+            }
+            .or_else(|| path_stats.map(|s| s.closure_size));
+            let size_str = size
+                .map(|s| format!("{:>10}", bytesize::ByteSize(s)))
                 .unwrap_or_default();
 
             let signed = store_path
