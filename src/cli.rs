@@ -106,17 +106,7 @@ OPTIONS:
 ARGUMENTS:
     [PATHS]...          Paths to explore (defaults to current system profile)
 
-KEYBINDINGS:
-    q/Esc               Quit
-    j/Down k/Up         Move down/up
-    h/Left l/Right      Ascend/descend into dependencies
-    g/Home G/End        Jump to first/last
-    PgUp PgDn           Move by page
-    /                   Search
-    w                   Show why-depends
-    y                   Yank selected store path to clipboard
-    s                   Change sort order
-    ?                   Show help
+Press ? inside the TUI for keybindings.
 "#
     );
 }
