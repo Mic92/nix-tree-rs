@@ -31,6 +31,7 @@ nix-tree                              # current-system / ~/.nix-profile
 nix-tree /nix/store/...-foo
 nix-tree --derivation nixpkgs#hello   # build-time deps, no build needed
 nix-tree --dot nixpkgs#hello | dot -Tsvg > deps.svg
+nix-tree --diff /nix/var/nix/profiles/system-{41,42}-link
 ```
 
 Press `?` inside the TUI for keybindings.

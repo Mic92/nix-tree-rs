@@ -1,5 +1,6 @@
 mod cli;
 mod clipboard;
+mod diff;
 mod dot;
 mod nix;
 mod path_stats;
@@ -56,6 +57,16 @@ async fn main() -> Result<()> {
         derivation: config.derivation,
         impure: config.impure,
     };
+
+    if config.diff {
+        let [old, new] = paths.as_slice() else {
+            anyhow::bail!("--diff requires exactly two installables");
+        };
+        let old = nix::query_path_info(std::slice::from_ref(old), true, &opts).await?;
+        let new = nix::query_path_info(std::slice::from_ref(new), true, &opts).await?;
+        diff::write(&old, &new, &mut io::stdout().lock())?;
+        return Ok(());
+    }
 
     if !config.dot {
         println!("Loading store paths...");

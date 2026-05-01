@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod clipboard;
+pub mod diff;
 pub mod dot;
 pub mod nix;
 pub mod path_stats;
