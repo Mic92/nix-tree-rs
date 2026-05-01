@@ -1,6 +1,42 @@
 use crate::store_path::StorePathGraph;
 use std::collections::{BTreeSet, HashMap};
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
+
+#[derive(Clone, Copy)]
+struct Ansi(bool);
+impl Ansi {
+    const RED: &'static str = "\x1b[31;1m";
+    const GREEN: &'static str = "\x1b[32;1m";
+    const DIM: &'static str = "\x1b[2m";
+    const RESET: &'static str = "\x1b[0m";
+    fn paint(self, code: &str, s: &str) -> String {
+        if self.0 {
+            format!("{code}{s}{}", Self::RESET)
+        } else {
+            s.to_string()
+        }
+    }
+}
+
+/// Derivation outputs (-dev, -man, -lib, ...) end up either on the version
+/// (hello-2.12-man -> version "2.12-man") or, for unversioned paths, on the
+/// pname. Fold them away so all outputs of one derivation group together.
+fn strip_output_suffix<'a>(pname: &'a str, version: &'a str) -> (&'a str, &'a str) {
+    fn strip(s: &str) -> Option<&str> {
+        let i = s.rfind('-')?;
+        let suffix = &s[i + 1..];
+        let known = !suffix.is_empty()
+            && (suffix.bytes().all(|b| b.is_ascii_lowercase())
+                || suffix == "lib32"
+                || suffix == "lib64");
+        known.then_some(&s[..i])
+    }
+    if !version.is_empty() {
+        (pname, strip(version).unwrap_or(version))
+    } else {
+        (strip(pname).unwrap_or(pname), version)
+    }
+}
 
 /// Mirrors nix's builtins.parseDrvName: the version is the suffix starting at
 /// the first `-` that is followed by a digit; everything before is the pname.
@@ -35,6 +71,7 @@ fn group_by_pname(graph: &StorePathGraph) -> (HashMap<String, Side>, u64) {
             .get(11 + p.hash.len() + 1..)
             .unwrap_or(p.name.as_str());
         let (pname, version) = parse_drv_name(raw_name);
+        let (pname, version) = strip_output_suffix(pname, version);
         let entry = groups.entry(pname.to_string()).or_default();
         entry.paths.insert(p.path.clone());
         if !version.is_empty() {
@@ -95,17 +132,27 @@ pub fn write(old: &StorePathGraph, new: &StorePathGraph, out: &mut impl Write) -
 
     rows.sort_by_key(|r| std::cmp::Reverse(r.delta.unsigned_abs()));
 
+    let ansi = Ansi(io::stdout().is_terminal());
+    let name_w = rows.iter().map(|r| r.pname.len()).max().unwrap_or(0);
+
     for r in &rows {
         let bv = r.before.as_ref().map(fmt_versions);
         let av = r.after.as_ref().map(fmt_versions);
         let change = match (bv, av) {
-            (None, Some(v)) => format!("∅ → {v}"),
-            (Some(v), None) => format!("{v} → ∅"),
-            (Some(b), Some(a)) if b == a => "(rebuilt)".to_string(),
+            (None, Some(v)) => ansi.paint(Ansi::GREEN, &format!("∅ → {v}")),
+            (Some(v), None) => ansi.paint(Ansi::RED, &format!("{v} → ∅")),
+            (Some(b), Some(a)) if b == a => ansi.paint(Ansi::DIM, "(rebuilt)"),
             (Some(b), Some(a)) => format!("{b} → {a}"),
             (None, None) => unreachable!(),
         };
-        writeln!(out, "{:>12}  {}: {}", fmt_delta(r.delta), r.pname, change)?;
+        // Pad before colouring so escape bytes don't skew the width.
+        let delta = format!("{:>12}", fmt_delta(r.delta));
+        let delta = match r.delta.signum() {
+            1 => ansi.paint(Ansi::RED, &delta),
+            -1 => ansi.paint(Ansi::GREEN, &delta),
+            _ => ansi.paint(Ansi::DIM, &delta),
+        };
+        writeln!(out, "{delta}  {:name_w$}  {change}", r.pname)?;
     }
 
     writeln!(out)?;
@@ -140,6 +187,24 @@ fn fmt_delta(d: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::parse_drv_name;
+
+    use super::strip_output_suffix;
+
+    #[test]
+    fn output_suffix_stripping() {
+        assert_eq!(strip_output_suffix("hello", "2.12-man"), ("hello", "2.12"));
+        assert_eq!(strip_output_suffix("jq", "1.8.1-bin"), ("jq", "1.8.1"));
+        assert_eq!(
+            strip_output_suffix("hm-session-vars.sh", ""),
+            ("hm-session-vars.sh", "")
+        );
+        assert_eq!(strip_output_suffix("ncurses", "6.6"), ("ncurses", "6.6"));
+        assert_eq!(
+            strip_output_suffix("glibc", "2.40-66"),
+            ("glibc", "2.40-66")
+        );
+        assert_eq!(strip_output_suffix("git-man", ""), ("git", ""));
+    }
 
     #[test]
     fn drv_name_parsing() {
