@@ -4,6 +4,7 @@ use anyhow::{Result, bail};
 pub struct Config {
     pub paths: Vec<String>,
     pub derivation: bool,
+    pub impure: bool,
     pub store: Option<String>,
     pub help: bool,
     pub version: bool,
@@ -28,6 +29,9 @@ pub fn parse_args() -> Result<Config> {
             }
             "-d" | "--derivation" => {
                 config.derivation = true;
+            }
+            "--impure" => {
+                config.impure = true;
             }
             "--store" => {
                 i += 1;
@@ -83,6 +87,7 @@ OPTIONS:
     -h, --help              Display help message
     -v, --version           Display version
     -d, --derivation        Operate on derivation store paths
+    --impure                Allow access to mutable paths and repositories
     --store <STORE>         The URL of the Nix store, e.g. "daemon" or "https://cache.nixos.org"
                             See "nix help-stores" for supported store types and settings
     --option <NAME> <VALUE> Pass option to nix commands

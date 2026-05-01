@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
         nix_options: config.nix_options,
         file: config.file,
         derivation: config.derivation,
+        impure: config.impure,
     };
     let graph = nix::query_path_info(&paths, true, &opts).await?;
 

@@ -22,6 +22,7 @@ pub struct QueryOptions {
     pub nix_options: Vec<(String, String)>,
     pub file: Option<String>,
     pub derivation: bool,
+    pub impure: bool,
 }
 
 /// `--file`/`--derivation` are subcommand flags, so this builds up to and
@@ -44,6 +45,9 @@ fn path_info_cmd(opts: &QueryOptions) -> Command {
     }
     if opts.derivation {
         cmd.arg("--derivation");
+    }
+    if opts.impure {
+        cmd.arg("--impure");
     }
 
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
