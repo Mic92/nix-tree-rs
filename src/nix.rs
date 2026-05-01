@@ -14,8 +14,6 @@ struct NixPathInfo {
     nar_size: u64,
     references: Vec<String>,
     signatures: Option<Vec<String>>,
-    #[serde(rename = "closureSize")]
-    closure_size: Option<u64>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -94,7 +92,6 @@ pub async fn query_path_info(
         file: None,
         ..opts.clone()
     });
-    cmd.arg("--closure-size");
     if recursive {
         cmd.arg("--recursive");
     }
@@ -112,7 +109,6 @@ pub async fn query_path_info(
             hash,
             name,
             nar_size: info.nar_size,
-            closure_size: info.closure_size,
             references: info.references,
             signatures: info.signatures.unwrap_or_default(),
         };
