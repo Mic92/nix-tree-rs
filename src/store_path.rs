@@ -9,7 +9,6 @@ pub struct StorePath {
     pub hash: String,
     pub name: String,
     pub nar_size: u64,
-    pub closure_size: Option<u64>,
     pub references: Vec<String>,
     pub signatures: Vec<String>,
 }
@@ -83,6 +82,10 @@ impl StorePathGraph {
 
     pub fn get_path(&self, path: &str) -> Option<&StorePath> {
         self.index.get(path).map(|&i| &self.paths[i])
+    }
+
+    pub fn index_of(&self, path: &str) -> Option<usize> {
+        self.index.get(path).copied()
     }
 
     pub fn get_references(&self, path: &str) -> Vec<&StorePath> {

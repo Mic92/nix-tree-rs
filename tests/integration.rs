@@ -41,7 +41,20 @@ async fn test_parse_hello_derivation() -> Result<()> {
     assert!(!stats.is_empty());
 
     let hello_stats = stats.get(&paths[0]).expect("Should have stats for hello");
-    assert!(hello_stats.closure_size > 0);
+    let expected = String::from_utf8(
+        Command::new("nix")
+            .args([
+                "--extra-experimental-features",
+                "nix-command",
+                "path-info",
+                "--closure-size",
+                &paths[0],
+            ])
+            .output()?
+            .stdout,
+    )?;
+    let expected: u64 = expected.split_whitespace().last().unwrap().parse()?;
+    assert_eq!(hello_stats.closure_size, expected);
 
     Ok(())
 }

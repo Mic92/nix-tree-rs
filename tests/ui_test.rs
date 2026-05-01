@@ -77,7 +77,6 @@ fn test_ranger_navigation() {
         hash: "aaa".to_string(),
         name: "root".to_string(),
         nar_size: 1000,
-        closure_size: Some(10000),
         references: vec![
             "/nix/store/bbb-dep1".to_string(),
             "/nix/store/ccc-dep2".to_string(),
@@ -90,7 +89,6 @@ fn test_ranger_navigation() {
         hash: "bbb".to_string(),
         name: "dep1".to_string(),
         nar_size: 500,
-        closure_size: Some(2000),
         references: vec![
             "/nix/store/ddd-dep1-1".to_string(),
             "/nix/store/eee-dep1-2".to_string(),
@@ -103,7 +101,6 @@ fn test_ranger_navigation() {
         hash: "ccc".to_string(),
         name: "dep2".to_string(),
         nar_size: 300,
-        closure_size: Some(300),
         references: vec![],
         signatures: vec![],
     };
@@ -113,7 +110,6 @@ fn test_ranger_navigation() {
         hash: "ddd".to_string(),
         name: "dep1-1".to_string(),
         nar_size: 100,
-        closure_size: Some(100),
         references: vec![],
         signatures: vec![],
     };
@@ -123,7 +119,6 @@ fn test_ranger_navigation() {
         hash: "eee".to_string(),
         name: "dep1-2".to_string(),
         nar_size: 100,
-        closure_size: Some(100),
         references: vec![],
         signatures: vec![],
     };
@@ -194,7 +189,6 @@ fn test_update_panes_logic() {
         hash: "abc".to_string(),
         name: "root".to_string(),
         nar_size: 1000,
-        closure_size: Some(5000),
         references: vec![
             "/nix/store/def-dep1".to_string(),
             "/nix/store/ghi-dep2".to_string(),
@@ -208,7 +202,6 @@ fn test_update_panes_logic() {
         hash: "def".to_string(),
         name: "dep1".to_string(),
         nar_size: 500,
-        closure_size: Some(1500),
         references: vec![
             "/nix/store/shared".to_string(),
             "/nix/store/dep1-only".to_string(),
@@ -221,7 +214,6 @@ fn test_update_panes_logic() {
         hash: "ghi".to_string(),
         name: "dep2".to_string(),
         nar_size: 300,
-        closure_size: Some(1300),
         references: vec![
             "/nix/store/shared".to_string(),
             "/nix/store/dep2-only".to_string(),
@@ -234,7 +226,6 @@ fn test_update_panes_logic() {
         hash: "sha".to_string(),
         name: "shared".to_string(),
         nar_size: 200,
-        closure_size: Some(200),
         references: vec![],
         signatures: vec![],
     };
@@ -244,7 +235,6 @@ fn test_update_panes_logic() {
         hash: "d1o".to_string(),
         name: "dep1-only".to_string(),
         nar_size: 100,
-        closure_size: Some(100),
         references: vec![],
         signatures: vec![],
     };
@@ -254,7 +244,6 @@ fn test_update_panes_logic() {
         hash: "d2o".to_string(),
         name: "dep2-only".to_string(),
         nar_size: 150,
-        closure_size: Some(150),
         references: vec![],
         signatures: vec![],
     };

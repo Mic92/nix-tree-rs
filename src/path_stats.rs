@@ -1,6 +1,56 @@
 use crate::store_path::StorePathGraph;
 use std::collections::{HashMap, HashSet};
 
+/// Adjacency list over dense integer ids so closure walks avoid hashing
+/// 90-byte store-path strings on every edge.
+struct IndexedGraph {
+    nar_size: Vec<u64>,
+    refs: Vec<Vec<u32>>,
+}
+
+impl IndexedGraph {
+    fn new(graph: &StorePathGraph) -> Self {
+        let n = graph.paths.len();
+        let mut nar_size = Vec::with_capacity(n);
+        let mut refs = Vec::with_capacity(n);
+        for p in &graph.paths {
+            nar_size.push(p.nar_size);
+            refs.push(
+                p.references
+                    .iter()
+                    .filter_map(|r| graph.index_of(r))
+                    .map(|i| i as u32)
+                    .collect(),
+            );
+        }
+        Self { nar_size, refs }
+    }
+
+    /// `seen[i] == generation` marks visited; bumping `generation` resets in O(1).
+    fn closure_size(
+        &self,
+        start: u32,
+        seen: &mut [u32],
+        generation: u32,
+        stack: &mut Vec<u32>,
+    ) -> u64 {
+        stack.clear();
+        stack.push(start);
+        seen[start as usize] = generation;
+        let mut size = 0u64;
+        while let Some(i) = stack.pop() {
+            size += self.nar_size[i as usize];
+            for &r in &self.refs[i as usize] {
+                if seen[r as usize] != generation {
+                    seen[r as usize] = generation;
+                    stack.push(r);
+                }
+            }
+        }
+        size
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PathStats {
     pub closure_size: u64,
@@ -9,25 +59,15 @@ pub struct PathStats {
 }
 
 pub fn calculate_stats(graph: &StorePathGraph) -> HashMap<String, PathStats> {
-    let mut stats = HashMap::new();
+    let mut stats = HashMap::with_capacity(graph.paths.len());
     let mut referrers = graph.build_referrers();
 
-    // When using --recursive, nix already gave us the full closure
-    // So we can use the closure_size field directly if available
-    for path in &graph.paths {
-        let closure_size = if let Some(size) = path.closure_size {
-            size
-        } else {
-            // Fallback: calculate closure size manually if not provided
-            let mut closure_cache: HashMap<String, HashSet<String>> = HashMap::new();
-            let closure = calculate_closure(graph, &path.path, &mut closure_cache);
-            closure
-                .iter()
-                .filter_map(|p| graph.get_path(p))
-                .map(|p| p.nar_size)
-                .sum()
-        };
+    let idx = IndexedGraph::new(graph);
+    let mut seen = vec![0u32; graph.paths.len()];
+    let mut stack = Vec::new();
 
+    for (i, path) in graph.paths.iter().enumerate() {
+        let closure_size = idx.closure_size(i as u32, &mut seen, i as u32 + 1, &mut stack);
         let immediate_parents = referrers.remove(&path.path).unwrap_or_default();
 
         stats.insert(
@@ -40,38 +80,7 @@ pub fn calculate_stats(graph: &StorePathGraph) -> HashMap<String, PathStats> {
         );
     }
 
-    // Skip added sizes calculation for now - it's too slow for large graphs
-    // This will be calculated on-demand when displaying in the UI
-
     stats
-}
-
-fn calculate_closure(
-    graph: &StorePathGraph,
-    path: &str,
-    cache: &mut HashMap<String, HashSet<String>>,
-) -> HashSet<String> {
-    if let Some(cached) = cache.get(path) {
-        return cached.clone();
-    }
-
-    let mut closure = HashSet::new();
-    let mut to_visit = vec![path.to_string()];
-
-    while let Some(current) = to_visit.pop() {
-        if closure.insert(current.clone()) {
-            if let Some(store_path) = graph.get_path(&current) {
-                for reference in &store_path.references {
-                    if !closure.contains(reference) {
-                        to_visit.push(reference.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    cache.insert(path.to_string(), closure.clone());
-    closure
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
