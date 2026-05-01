@@ -1,4 +1,5 @@
 mod cli;
+mod dot;
 mod nix;
 mod path_stats;
 mod store_path;
@@ -47,7 +48,6 @@ async fn main() -> Result<()> {
         }
     }
 
-    println!("Loading store paths...");
     let opts = nix::QueryOptions {
         store: config.store,
         nix_options: config.nix_options,
@@ -55,7 +55,16 @@ async fn main() -> Result<()> {
         derivation: config.derivation,
         impure: config.impure,
     };
+
+    if !config.dot {
+        println!("Loading store paths...");
+    }
     let graph = nix::query_path_info(&paths, true, &opts).await?;
+
+    if config.dot {
+        dot::write(&graph, &mut io::stdout().lock())?;
+        return Ok(());
+    }
 
     println!("Calculating sizes...");
     let stats = path_stats::calculate_stats(&graph);
