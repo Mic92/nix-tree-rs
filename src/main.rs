@@ -13,11 +13,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{
-    Terminal,
-    backend::CrosstermBackend,
-    layout::{Constraint, Layout},
-};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use std::time::Duration;
 
@@ -118,24 +114,7 @@ async fn run_app(
     loop {
         // Only render when needed
         if needs_render {
-            terminal.draw(|f| {
-                let chunks =
-                    Layout::vertical([Constraint::Min(1), Constraint::Length(4)]).split(f.area());
-
-                ui::pane::render_panes(f, &app, chunks[0]);
-                ui::widgets::render_status_bar(f, &app, chunks[1]);
-
-                if app.show_help {
-                    ui::widgets::render_help(f, f.area());
-                }
-
-                if app.searching {
-                    ui::widgets::render_search(f, f.area(), &app.search_query);
-                }
-
-                // Render modal on top
-                ui::widgets::render_modal(f, &app, f.area());
-            })?;
+            terminal.draw(|f| ui::render_frame(f, &app))?;
             needs_render = false;
         }
 

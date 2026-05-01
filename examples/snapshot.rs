@@ -9,8 +9,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use nix_tree::nix::{self, QueryOptions};
 use nix_tree::path_stats;
-use nix_tree::ui::{self, App, pane};
-use ratatui::layout::{Constraint, Layout};
+use nix_tree::ui::{self, App};
 use ratatui::{Terminal, backend::TestBackend};
 
 #[tokio::main]
@@ -37,18 +36,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let mut term = Terminal::new(TestBackend::new(140, 40))?;
-    term.draw(|f| {
-        let chunks = Layout::vertical([Constraint::Min(1), Constraint::Length(4)]).split(f.area());
-        pane::render_panes(f, &app, chunks[0]);
-        ui::widgets::render_status_bar(f, &app, chunks[1]);
-        if app.show_help {
-            ui::widgets::render_help(f, f.area());
-        }
-        if app.searching {
-            ui::widgets::render_search(f, f.area(), &app.search_query);
-        }
-        ui::widgets::render_modal(f, &app, f.area());
-    })?;
+    term.draw(|f| ui::render_frame(f, &app))?;
 
     let buf = term.backend().buffer();
     for y in 0..buf.area.height {
