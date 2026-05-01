@@ -36,6 +36,22 @@ nix-tree --diff /nix/var/nix/profiles/system-{41,42}-link
 
 Press `?` inside the TUI for keybindings.
 
+### `--diff`
+
+Like `nix store diff-closures`, but sorted by size impact and with totals:
+
+```console
+$ nix-tree --diff /nix/var/nix/profiles/system-{41,42}-link
+    -1.1 GiB  uutils-coreutils         (rebuilt)
+   +24.2 MiB  gemini-cli               0.37.1 → 0.39.1
+   +10.1 MiB  gettext                  0.26 → 1.0
+    +7.6 MiB  pi-agent-deps            ∅ → 0.1.0
+    -1.1 MiB  unixobcd                 2.3.12 → ∅
+  +980.6 KiB  binutils                 2.44 → 2.46
+  ...
+722 paths → 728 paths, 9.6 GiB → 8.5 GiB (-1.0 GiB)
+```
+
 **Sizes:** *NAR* = the path itself · *closure* = path + all references ·
 *added* = closure space lost if this path alone were removed from the parent.
 
