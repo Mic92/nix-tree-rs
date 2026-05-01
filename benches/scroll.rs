@@ -50,7 +50,6 @@ async fn main() -> anyhow::Result<()> {
     let down = KeyEvent::from(KeyCode::Down);
     let iters = 200u32;
 
-    // Warm up once.
     term.draw(|f| ui::render_frame(f, &app))?;
 
     let t = Instant::now();

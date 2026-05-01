@@ -60,7 +60,6 @@ async fn run_path_info<T: serde::de::DeserializeOwned>(mut cmd: Command) -> Resu
     serde_json::from_slice(&output.stdout).context("Failed to parse nix path-info JSON")
 }
 
-/// Resolve flake references and other inputs to store paths
 async fn resolve_paths(paths: &[String], opts: &QueryOptions) -> Result<Vec<String>> {
     let mut cmd = path_info_cmd(opts);
     cmd.args(paths);
