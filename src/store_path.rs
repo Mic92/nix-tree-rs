@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -57,6 +58,7 @@ impl fmt::Display for StorePath {
 pub struct StorePathGraph {
     pub paths: Vec<StorePath>,
     pub roots: Vec<String>,
+    index: HashMap<String, usize>,
 }
 
 impl Default for StorePathGraph {
@@ -70,15 +72,17 @@ impl StorePathGraph {
         Self {
             paths: Vec::new(),
             roots: Vec::new(),
+            index: HashMap::new(),
         }
     }
 
     pub fn add_path(&mut self, path: StorePath) {
+        self.index.insert(path.path.clone(), self.paths.len());
         self.paths.push(path);
     }
 
     pub fn get_path(&self, path: &str) -> Option<&StorePath> {
-        self.paths.iter().find(|p| p.path == path)
+        self.index.get(path).map(|&i| &self.paths[i])
     }
 
     pub fn get_references(&self, path: &str) -> Vec<&StorePath> {
@@ -94,11 +98,18 @@ impl StorePathGraph {
         }
     }
 
-    pub fn get_referrers(&self, path: &str) -> Vec<&StorePath> {
-        self.paths
-            .iter()
-            .filter(|p| p.path != path && p.references.contains(&path.to_string()))
-            .collect()
+    /// Reverse adjacency list (path → referrers), built in O(V + E).
+    /// Replaces a per-path linear scan that dominated startup on large closures.
+    pub fn build_referrers(&self) -> HashMap<String, Vec<String>> {
+        let mut referrers: HashMap<String, Vec<String>> = HashMap::with_capacity(self.paths.len());
+        for p in &self.paths {
+            for r in &p.references {
+                if r != &p.path {
+                    referrers.entry(r.clone()).or_default().push(p.path.clone());
+                }
+            }
+        }
+        referrers
     }
 
     pub fn disambiguate_names(&mut self) {

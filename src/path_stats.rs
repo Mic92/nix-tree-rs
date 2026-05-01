@@ -10,6 +10,7 @@ pub struct PathStats {
 
 pub fn calculate_stats(graph: &StorePathGraph) -> HashMap<String, PathStats> {
     let mut stats = HashMap::new();
+    let mut referrers = graph.build_referrers();
 
     // When using --recursive, nix already gave us the full closure
     // So we can use the closure_size field directly if available
@@ -27,11 +28,7 @@ pub fn calculate_stats(graph: &StorePathGraph) -> HashMap<String, PathStats> {
                 .sum()
         };
 
-        let immediate_parents = graph
-            .get_referrers(&path.path)
-            .into_iter()
-            .map(|p| p.path.clone())
-            .collect();
+        let immediate_parents = referrers.remove(&path.path).unwrap_or_default();
 
         stats.insert(
             path.path.clone(),
