@@ -3,13 +3,13 @@ use std::collections::{HashMap, HashSet};
 
 /// Adjacency list over dense integer ids so closure walks avoid hashing
 /// 90-byte store-path strings on every edge.
-struct IndexedGraph {
+pub struct IndexedGraph {
     nar_size: Vec<u64>,
     refs: Vec<Vec<u32>>,
 }
 
 impl IndexedGraph {
-    fn new(graph: &StorePathGraph) -> Self {
+    pub fn new(graph: &StorePathGraph) -> Self {
         let n = graph.paths.len();
         let mut nar_size = Vec::with_capacity(n);
         let mut refs = Vec::with_capacity(n);
@@ -48,6 +48,75 @@ impl IndexedGraph {
             }
         }
         size
+    }
+
+    /// Walk from `roots` summing nar sizes, optionally never entering `skip`
+    /// so the result is the closure that would remain if `skip` (and
+    /// everything only it kept alive) were removed.
+    fn closure_size_from(&self, roots: &[u32], skip: Option<u32>, seen: &mut [bool]) -> u64 {
+        seen.fill(false);
+        if let Some(s) = skip {
+            seen[s as usize] = true;
+        }
+        let mut stack = Vec::with_capacity(roots.len());
+        for &r in roots {
+            if !seen[r as usize] {
+                seen[r as usize] = true;
+                stack.push(r);
+            }
+        }
+        let mut size = 0u64;
+        while let Some(i) = stack.pop() {
+            size += self.nar_size[i as usize];
+            for &r in &self.refs[i as usize] {
+                if !seen[r as usize] {
+                    seen[r as usize] = true;
+                    stack.push(r);
+                }
+            }
+        }
+        size
+    }
+}
+
+/// Reusable buffers + cached context closure for added-size queries from the
+/// status bar, so scrolling within one parent only pays one full walk.
+pub struct AddedSize {
+    idx: IndexedGraph,
+    seen: Vec<bool>,
+    context_roots: Vec<u32>,
+    context_total: u64,
+}
+
+impl AddedSize {
+    pub fn new(graph: &StorePathGraph) -> Self {
+        let idx = IndexedGraph::new(graph);
+        let seen = vec![false; graph.paths.len()];
+        Self {
+            idx,
+            seen,
+            context_roots: Vec::new(),
+            context_total: 0,
+        }
+    }
+
+    pub fn for_path(&mut self, graph: &StorePathGraph, path: &str, context: &[String]) -> u64 {
+        let roots: Vec<u32> = context
+            .iter()
+            .filter_map(|p| graph.index_of(p))
+            .map(|i| i as u32)
+            .collect();
+        if roots != self.context_roots {
+            self.context_total = self.idx.closure_size_from(&roots, None, &mut self.seen);
+            self.context_roots = roots;
+        }
+        let Some(target) = graph.index_of(path) else {
+            return 0;
+        };
+        let without =
+            self.idx
+                .closure_size_from(&self.context_roots, Some(target as u32), &mut self.seen);
+        self.context_total.saturating_sub(without)
     }
 }
 

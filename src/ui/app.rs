@@ -3,8 +3,9 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::widgets::ListState;
 use std::collections::HashMap;
 
-use crate::path_stats::{PathStats, SortOrder};
+use crate::path_stats::{AddedSize, PathStats, SortOrder};
 use crate::store_path::StorePathGraph;
+use std::cell::RefCell;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
@@ -49,9 +50,17 @@ pub struct App {
 
     pub modal: Option<Modal>,
     pub status_message: Option<String>,
+    added_size: RefCell<AddedSize>,
 }
 
 impl App {
+    pub fn added_size_of(&self, path: &str) -> u64 {
+        let context = self.get_parent_context();
+        self.added_size
+            .borrow_mut()
+            .for_path(&self.graph, path, &context)
+    }
+
     pub fn get_parent_context(&self) -> Vec<String> {
         // Get the parent context from navigation history
         // For added size calculation, we need the specific parent we navigated from
@@ -71,6 +80,7 @@ impl App {
     }
 
     pub fn new(graph: StorePathGraph, stats: HashMap<String, PathStats>) -> Self {
+        let added_size = RefCell::new(AddedSize::new(&graph));
         let mut app = Self {
             graph,
             stats,
@@ -89,6 +99,7 @@ impl App {
             navigation_history: Vec::new(),
             modal: None,
             status_message: None,
+            added_size,
         };
 
         // Start with all roots in the current pane
