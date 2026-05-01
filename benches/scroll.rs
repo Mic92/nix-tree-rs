@@ -9,8 +9,8 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent};
 use nix_tree::nix::{self, QueryOptions};
 use nix_tree::path_stats;
-use nix_tree::ui::{App, pane};
-use ratatui::{Terminal, backend::TestBackend, layout::Rect};
+use nix_tree::ui::{self, App};
+use ratatui::{Terminal, backend::TestBackend};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -46,18 +46,17 @@ async fn main() -> anyhow::Result<()> {
     app.current_state.select(Some(0));
 
     let mut term = Terminal::new(TestBackend::new(180, 50))?;
-    let area = Rect::new(0, 0, 180, 50);
 
     let down = KeyEvent::from(KeyCode::Down);
     let iters = 200u32;
 
     // Warm up once.
-    term.draw(|f| pane::render_panes(f, &app, area))?;
+    term.draw(|f| ui::render_frame(f, &app))?;
 
     let t = Instant::now();
     for _ in 0..iters {
         app.handle_key(down)?;
-        term.draw(|f| pane::render_panes(f, &app, area))?;
+        term.draw(|f| ui::render_frame(f, &app))?;
     }
     let elapsed = t.elapsed();
     eprintln!(
