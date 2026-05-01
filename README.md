@@ -16,6 +16,27 @@ A Rust port of [nix-tree](https://github.com/utdemir/nix-tree), providing an int
 - **Signature Verification**: See which packages are signed
 - **Vim-like Keybindings**: Familiar navigation for vim users
 
+## Why a Rust port?
+
+The original [nix-tree] is great, but on large closures its startup is dominated
+by computing closure sizes over string-keyed maps. `nix-tree-rs` builds a dense
+integer-indexed graph and walks it with reusable buffers, so it stays responsive
+on system-sized closures.
+
+Measured on a 12 253-path NixOS system derivation closure (Apple M-series,
+warm Nix store):
+
+|                          | nix-tree 0.8.0 | nix-tree-rs |
+| ------------------------ | -------------- | ----------- |
+| load + compute all sizes | 2 m 44 s¹     | **1.6 s**   |
+| runtime closure          | 99 MiB         | 45 MiB      |
+
+¹ `nix-tree --dot`, which exercises the same load path as the TUI.
+
+Feature parity is close but not complete; see [differences](#differences-from-nix-tree).
+
+[nix-tree]: https://github.com/utdemir/nix-tree
+
 ## Installation
 
 ```bash
@@ -74,6 +95,20 @@ For each package:
 - **NAR Size**: The size of the package itself
 - **Closure Size**: Total size including all dependencies
 - **Added Size**: Additional space this package adds (excluding shared dependencies)
+
+## Differences from nix-tree
+
+Not yet supported:
+
+- `--dot` graphviz output
+- `--impure` flag forwarding
+- `y` to yank the selected store path to the clipboard
+
+Additions:
+
+- `--option NAME VALUE` to forward arbitrary Nix options
+- `g`/`G`/`PgUp`/`PgDn` navigation in the main list
+- per-pane position counter and visible sort order
 
 ## Building from Source
 
