@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::io::Write;
 use std::process::Command;
 
 #[tokio::test]
@@ -27,7 +28,7 @@ async fn test_parse_hello_derivation() -> Result<()> {
     assert!(name.contains("hello"));
 
     let paths = vec![drv_path];
-    let graph = nix_tree::nix::query_path_info(&paths, true, None).await?;
+    let graph = nix_tree::nix::query_path_info(&paths, true, &Default::default()).await?;
 
     assert!(!graph.paths.is_empty());
 
@@ -41,6 +42,41 @@ async fn test_parse_hello_derivation() -> Result<()> {
 
     let hello_stats = stats.get(&paths[0]).expect("Should have stats for hello");
     assert!(hello_stats.closure_size > 0);
+
+    Ok(())
+}
+
+/// https://github.com/Mic92/nix-tree-rs/issues/23
+#[tokio::test]
+async fn test_unbuilt_derivation_flag() -> Result<()> {
+    let mut expr = tempfile::NamedTempFile::with_suffix(".nix")?;
+    // Unique salt keeps the output path unbuilt across test runs.
+    let salt: u128 = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    write!(
+        expr,
+        r#"derivation {{
+  name = "nix-tree-unbuilt-test";
+  builder = "/bin/sh";
+  args = [ "-c" "echo unreachable > $out" ];
+  system = builtins.currentSystem;
+  salt = "{salt}";
+}}"#
+    )?;
+    expr.flush()?;
+
+    let opts = nix_tree::nix::QueryOptions {
+        file: Some(expr.path().to_string_lossy().into_owned()),
+        derivation: true,
+        ..Default::default()
+    };
+
+    let graph = nix_tree::nix::query_path_info(&[String::new()], true, &opts).await?;
+
+    assert_eq!(graph.roots.len(), 1);
+    let root = &graph.roots[0];
+    assert!(root.ends_with(".drv"), "expected .drv root, got {root}");
 
     Ok(())
 }

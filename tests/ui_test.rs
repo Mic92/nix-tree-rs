@@ -16,7 +16,7 @@ async fn test_initial_dependencies_loading() {
         }
     }
 
-    let graph = nix_tree::nix::query_path_info(&paths, true, None)
+    let graph = nix_tree::nix::query_path_info(&paths, true, &Default::default())
         .await
         .unwrap();
 
