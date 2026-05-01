@@ -6,6 +6,7 @@ pub struct Config {
     pub derivation: bool,
     pub impure: bool,
     pub dot: bool,
+    pub diff: bool,
     pub store: Option<String>,
     pub help: bool,
     pub version: bool,
@@ -36,6 +37,9 @@ pub fn parse_args() -> Result<Config> {
             }
             "--dot" => {
                 config.dot = true;
+            }
+            "--diff" => {
+                config.diff = true;
             }
             "--store" => {
                 i += 1;
@@ -93,6 +97,7 @@ OPTIONS:
     -d, --derivation        Operate on derivation store paths
     --impure                Allow access to mutable paths and repositories
     --dot                   Print the dependency graph in dot format and exit
+    --diff                  Compare two closures (requires exactly two installables)
     --store <STORE>         The URL of the Nix store, e.g. "daemon" or "https://cache.nixos.org"
                             See "nix help-stores" for supported store types and settings
     --option <NAME> <VALUE> Pass option to nix commands
