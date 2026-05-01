@@ -149,6 +149,8 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<bool> {
+        self.status_message = None;
+
         // Handle modal first
         if let Some(modal) = &mut self.modal {
             match modal {
@@ -232,8 +234,6 @@ impl App {
             }
             return Ok(false);
         }
-
-        self.status_message = None;
 
         if self.searching {
             match key.code {
