@@ -72,7 +72,9 @@ async fn resolve_paths(paths: &[String], opts: &QueryOptions) -> Result<Vec<Stri
     let mut resolved = Vec::with_capacity(map.len());
     for (path, info) in map {
         if info.is_none() {
-            anyhow::bail!("store path '{path}' is not valid (output not built?); try --derivation");
+            anyhow::bail!(
+                "'{path}' is not in the store (garbage-collected, or pass --derivation for unbuilt outputs)"
+            );
         }
         resolved.push(path);
     }
