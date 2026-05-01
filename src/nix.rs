@@ -26,51 +26,59 @@ pub struct QueryOptions {
     pub derivation: bool,
 }
 
-/// Must be called after the `path-info` subcommand: `--file`/`--derivation`
-/// are subcommand flags and are rejected in global position.
-fn apply_common_args(cmd: &mut Command, opts: &QueryOptions) {
-    for (name, value) in &opts.nix_options {
-        cmd.arg("--option").arg(name).arg(value);
-    }
-
-    if let Some(store_url) = &opts.store {
-        cmd.arg("--store").arg(store_url);
-    }
-
-    if let Some(file_path) = &opts.file {
-        cmd.arg("--file").arg(file_path);
-    }
-
-    if opts.derivation {
-        cmd.arg("--derivation");
-    }
-}
-
-/// Resolve flake references and other inputs to store paths
-async fn resolve_paths(paths: &[String], opts: &QueryOptions) -> Result<Vec<String>> {
+/// `--file`/`--derivation` are subcommand flags, so this builds up to and
+/// including `path-info` before applying them.
+fn path_info_cmd(opts: &QueryOptions) -> Command {
     let mut cmd = Command::new("nix");
     cmd.arg("--extra-experimental-features")
         .arg("nix-command flakes")
         .arg("path-info")
         .arg("--json");
-    apply_common_args(&mut cmd, opts);
-    cmd.args(paths)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
 
-    let output = cmd.output().await.context("Failed to run nix path-info")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("nix path-info failed: {}", stderr);
+    for (name, value) in &opts.nix_options {
+        cmd.arg("--option").arg(name).arg(value);
+    }
+    if let Some(store_url) = &opts.store {
+        cmd.arg("--store").arg(store_url);
+    }
+    if let Some(file_path) = &opts.file {
+        cmd.arg("--file").arg(file_path);
+    }
+    if opts.derivation {
+        cmd.arg("--derivation");
     }
 
-    let json_str = String::from_utf8(output.stdout).context("Invalid UTF-8 in nix output")?;
-    let path_info_map: std::collections::HashMap<String, NixPathInfo> =
-        serde_json::from_str(&json_str).context("Failed to parse nix path-info JSON")?;
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd
+}
 
-    // Return the resolved store paths
-    Ok(path_info_map.keys().cloned().collect())
+async fn run_path_info<T: serde::de::DeserializeOwned>(mut cmd: Command) -> Result<T> {
+    let output = cmd.output().await.context("Failed to run nix path-info")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("nix path-info failed: {stderr}");
+    }
+    serde_json::from_slice(&output.stdout).context("Failed to parse nix path-info JSON")
+}
+
+/// Resolve flake references and other inputs to store paths
+async fn resolve_paths(paths: &[String], opts: &QueryOptions) -> Result<Vec<String>> {
+    let mut cmd = path_info_cmd(opts);
+    cmd.args(paths);
+
+    // For paths not in the store nix emits `"<path>": null` with exit 0, so
+    // the value side must tolerate null instead of forcing NixPathInfo.
+    let map: std::collections::HashMap<String, Option<serde_json::Value>> =
+        run_path_info(cmd).await?;
+
+    let mut resolved = Vec::with_capacity(map.len());
+    for (path, info) in map {
+        if info.is_none() {
+            anyhow::bail!("store path '{path}' is not valid (output not built?); try --derivation");
+        }
+        resolved.push(path);
+    }
+    Ok(resolved)
 }
 
 pub async fn query_path_info(
@@ -81,40 +89,18 @@ pub async fn query_path_info(
     // First resolve any flake references to store paths
     let resolved_paths = resolve_paths(paths, opts).await?;
 
-    let mut cmd = Command::new("nix");
-    cmd.arg("--extra-experimental-features")
-        .arg("nix-command flakes")
-        .arg("path-info")
-        .arg("--json")
-        .arg("--closure-size");
     // resolved_paths are store paths; --file would misinterpret them as attrs.
-    let store_opts = QueryOptions {
+    let mut cmd = path_info_cmd(&QueryOptions {
         file: None,
         ..opts.clone()
-    };
-    apply_common_args(&mut cmd, &store_opts);
-    cmd.args(&resolved_paths)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
+    });
+    cmd.arg("--closure-size");
     if recursive {
         cmd.arg("--recursive");
     }
+    cmd.args(&resolved_paths);
 
-    let output = cmd
-        .output()
-        .await
-        .context("Failed to execute nix path-info")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("nix path-info failed: {}", stderr);
-    }
-
-    let json_str = String::from_utf8(output.stdout).context("Invalid UTF-8 in nix output")?;
-
-    let path_info_map: std::collections::HashMap<String, NixPathInfo> =
-        serde_json::from_str(&json_str).context("Failed to parse nix path-info JSON")?;
+    let path_info_map: std::collections::HashMap<String, NixPathInfo> = run_path_info(cmd).await?;
 
     let mut graph = StorePathGraph::new();
 
