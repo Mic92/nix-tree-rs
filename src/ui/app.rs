@@ -51,6 +51,12 @@ pub struct App {
     pub modal: Option<Modal>,
     pub status_message: Option<String>,
     added_size: RefCell<AddedSize>,
+
+    /// Per-pane added sizes when sorting by AddedSize, so the list column can
+    /// show the value the order is based on without recomputing per frame.
+    pub previous_added: HashMap<String, u64>,
+    pub current_added: HashMap<String, u64>,
+    pub next_added: HashMap<String, u64>,
 }
 
 impl App {
@@ -61,23 +67,27 @@ impl App {
             .for_path(&self.graph, path, &context)
     }
 
-    fn sorted(&self, mut items: Vec<String>, context: Option<&[String]>) -> Vec<String> {
+    fn sorted(
+        &self,
+        mut items: Vec<String>,
+        context: Option<&[String]>,
+    ) -> (Vec<String>, HashMap<String, u64>) {
         let added = match (self.sort_order, context) {
-            (SortOrder::AddedSize, Some(ctx)) => Some(self.added_size.borrow_mut().for_items(
-                &self.graph,
-                &items,
-                ctx,
-            )),
-            _ => None,
+            (SortOrder::AddedSize, Some(ctx)) => {
+                self.added_size
+                    .borrow_mut()
+                    .for_items(&self.graph, &items, ctx)
+            }
+            _ => HashMap::new(),
         };
         crate::path_stats::sort_paths(
             &mut items,
             &self.graph,
             &self.stats,
             self.sort_order,
-            added.as_ref(),
+            if added.is_empty() { None } else { Some(&added) },
         );
-        items
+        (items, added)
     }
 
     pub fn get_parent_context(&self) -> Vec<String> {
@@ -119,13 +129,16 @@ impl App {
             modal: None,
             status_message: None,
             added_size,
+            previous_added: HashMap::new(),
+            current_added: HashMap::new(),
+            next_added: HashMap::new(),
         };
 
         // Start with all roots in the current pane
         app.current_items = app.graph.roots.clone();
         let roots = app.graph.roots.clone();
         let items = std::mem::take(&mut app.current_items);
-        app.current_items = app.sorted(items, Some(&roots));
+        (app.current_items, app.current_added) = app.sorted(items, Some(&roots));
 
         if !app.current_items.is_empty() {
             app.current_state.select(Some(0));
@@ -285,8 +298,17 @@ impl App {
     }
 
     fn move_left(&mut self) {
-        // Go back in navigation history
         if let Some((items, selected_idx)) = self.navigation_history.pop() {
+            // Keep the historical order so selected_idx stays valid; only
+            // refresh the added-size column for the new (now-popped) parent.
+            self.current_added = if self.sort_order == SortOrder::AddedSize {
+                let parent = self.get_parent_context();
+                self.added_size
+                    .borrow_mut()
+                    .for_items(&self.graph, &items, &parent)
+            } else {
+                HashMap::new()
+            };
             self.current_items = items;
             self.current_state = ListState::default();
             if let Some(idx) = selected_idx {
@@ -304,8 +326,10 @@ impl App {
             self.navigation_history
                 .push((self.current_items.clone(), current_selection));
 
-            // Move all dependencies to become the new current items
-            self.current_items = self.next_items.clone();
+            // next_added was computed against the very parent we just
+            // descended from, so it becomes the new current map verbatim.
+            self.current_items = std::mem::take(&mut self.next_items);
+            self.current_added = std::mem::take(&mut self.next_added);
             self.current_state.select(Some(0));
             self.update_panes();
         }
@@ -327,7 +351,7 @@ impl App {
                 .get(&path)
                 .map(|s| s.immediate_parents.clone())
                 .unwrap_or_default();
-            self.previous_items = self.sorted(parents, None);
+            (self.previous_items, self.previous_added) = self.sorted(parents, None);
 
             let refs = self
                 .graph
@@ -335,7 +359,8 @@ impl App {
                 .into_iter()
                 .map(|p| p.path.clone())
                 .collect::<Vec<_>>();
-            self.next_items = self.sorted(refs, Some(std::slice::from_ref(&path)));
+            (self.next_items, self.next_added) =
+                self.sorted(refs, Some(std::slice::from_ref(&path)));
 
             // Reset selections in side panes but keep current pane focus
             self.previous_state = ListState::default();
@@ -360,9 +385,9 @@ impl App {
         let cur = std::mem::take(&mut self.current_items);
         let prev = std::mem::take(&mut self.previous_items);
         let next = std::mem::take(&mut self.next_items);
-        self.current_items = self.sorted(cur, Some(&parent));
-        self.previous_items = self.sorted(prev, None);
-        self.next_items = self.sorted(next, next_ctx.as_deref());
+        (self.current_items, self.current_added) = self.sorted(cur, Some(&parent));
+        (self.previous_items, self.previous_added) = self.sorted(prev, None);
+        (self.next_items, self.next_added) = self.sorted(next, next_ctx.as_deref());
     }
 
     fn perform_search(&mut self) {
@@ -380,8 +405,9 @@ impl App {
             .collect();
 
         if !matching_paths.is_empty() {
-            let roots = self.graph.roots.clone();
-            self.current_items = self.sorted(matching_paths, Some(&roots));
+            // Keep relevance order rather than re-sorting by size.
+            self.current_items = matching_paths;
+            self.current_added = HashMap::new();
             self.current_state.select(Some(0));
             self.active_pane = Pane::Current;
             self.update_panes();
@@ -436,7 +462,7 @@ impl App {
         self.navigation_history.clear();
 
         let roots = self.graph.roots.clone();
-        self.current_items = self.sorted(roots.clone(), Some(&roots));
+        (self.current_items, self.current_added) = self.sorted(roots.clone(), Some(&roots));
 
         // Navigate through the path
         for (i, target) in path.iter().enumerate() {
