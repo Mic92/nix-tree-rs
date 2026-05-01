@@ -21,6 +21,7 @@ pub fn render_help(f: &mut Frame, area: Rect) {
         Line::from("  /       Search"),
         Line::from("  w       Show why-depends (use h/l to scroll horizontally)"),
         Line::from("  y       Yank selected store path to clipboard"),
+        Line::from("  r       Jump back to roots"),
         Line::from("  s       Change sort order"),
         Line::from("  ?       Toggle this help"),
         Line::from("  q/Esc   Quit"),
