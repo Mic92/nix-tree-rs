@@ -23,6 +23,7 @@ pub fn render_help(f: &mut Frame, area: Rect) {
         Line::from("Actions:"),
         Line::from("  /       Search"),
         Line::from("  w       Show why-depends (use h/l to scroll horizontally)"),
+        Line::from("  y       Yank selected store path to clipboard"),
         Line::from("  s       Change sort order"),
         Line::from("  ?       Toggle this help"),
         Line::from("  q/Esc   Quit"),
@@ -63,6 +64,14 @@ pub fn render_search(f: &mut Frame, area: Rect, query: &str) {
 }
 
 pub fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
+    if let Some(msg) = &app.status_message {
+        let line = Line::from(Span::styled(
+            msg.clone(),
+            Style::default().fg(Color::Black).bg(Color::Yellow),
+        ));
+        f.render_widget(Paragraph::new(line), area);
+        return;
+    }
     if let Some(path) = &app.current_path {
         // First line: full path
         let path_line = Line::from(vec![Span::raw(path)]);

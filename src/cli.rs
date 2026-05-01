@@ -108,6 +108,8 @@ KEYBINDINGS:
     g/Home G/End        Jump to first/last
     PgUp PgDn           Move by page
     /                   Search
+    w                   Show why-depends
+    y                   Yank selected store path to clipboard
     s                   Change sort order
     ?                   Show help
 "#

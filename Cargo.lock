@@ -638,6 +638,7 @@ name = "nix-tree"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "bytesize",
  "crossterm",
  "indexmap",

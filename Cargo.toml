@@ -8,6 +8,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 anyhow = "1.0"
+base64 = "0.22"
 bytesize = "2.3.1"
 crossterm = "0.29"
 indexmap = "2.14"

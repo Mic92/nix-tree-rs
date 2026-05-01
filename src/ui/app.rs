@@ -50,6 +50,7 @@ pub struct App {
     pub navigation_history: Vec<(Vec<String>, Option<usize>)>,
 
     pub modal: Option<Modal>,
+    pub status_message: Option<String>,
 }
 
 impl App {
@@ -89,6 +90,7 @@ impl App {
             current_path: None,
             navigation_history: Vec::new(),
             modal: None,
+            status_message: None,
         };
 
         // Start with all roots in the current pane
@@ -179,6 +181,8 @@ impl App {
             return Ok(false);
         }
 
+        self.status_message = None;
+
         if self.searching {
             match key.code {
                 KeyCode::Esc => {
@@ -208,6 +212,7 @@ impl App {
                 self.search_query.clear();
             }
             KeyCode::Char('w') => self.show_why_depends(),
+            KeyCode::Char('y') => self.yank_current_path(),
             KeyCode::Char('s') => {
                 self.sort_order = self.sort_order.next();
                 self.resort_current_pane();
@@ -225,6 +230,15 @@ impl App {
         }
 
         Ok(false)
+    }
+
+    fn yank_current_path(&mut self) {
+        if let Some(path) = &self.current_path {
+            self.status_message = Some(match crate::clipboard::copy(path) {
+                Ok(()) => format!("Copied to clipboard: {path}"),
+                Err(e) => format!("Clipboard error: {e}"),
+            });
+        }
     }
 
     fn move_selection(&mut self, delta: isize) {

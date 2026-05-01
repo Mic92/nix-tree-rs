@@ -1,4 +1,5 @@
 mod cli;
+mod clipboard;
 mod dot;
 mod nix;
 mod path_stats;
