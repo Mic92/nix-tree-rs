@@ -60,7 +60,7 @@ pub fn parse_args() -> Result<Config> {
                 config.file = Some(arg.strip_prefix("--file=").unwrap().to_string());
             }
             arg if arg.starts_with('-') => {
-                bail!("Unknown option: {}", arg);
+                bail!("Unknown option: {arg}");
             }
             _ => {
                 config.paths.push(args[i].clone());

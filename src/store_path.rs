@@ -18,21 +18,21 @@ impl StorePath {
         let path = path.trim();
 
         if !path.starts_with("/nix/store/") {
-            bail!("Invalid store path: {}", path);
+            bail!("Invalid store path: {path}");
         }
 
         let without_prefix = path.strip_prefix("/nix/store/").unwrap();
         let parts: Vec<&str> = without_prefix.splitn(2, '-').collect();
 
         if parts.len() != 2 {
-            bail!("Invalid store path format: {}", path);
+            bail!("Invalid store path format: {path}");
         }
 
         let hash = parts[0].to_string();
         let name = parts[1].to_string();
 
         if hash.len() != 32 {
-            bail!("Invalid store path hash length: {}", hash);
+            bail!("Invalid store path hash length: {hash}");
         }
 
         Ok((hash, name))

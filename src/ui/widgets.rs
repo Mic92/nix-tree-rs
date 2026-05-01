@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation},
 };
 use std::collections::HashSet;
 
@@ -231,16 +231,19 @@ fn calculate_added_size_for_path(
     context_total_size.saturating_sub(filtered_size)
 }
 
-pub fn render_why_depends(
-    f: &mut Frame,
-    area: Rect,
-    formatted_lines: &[String],
-    max_line_width: usize,
-    selected: usize,
-    vertical_scroll_state: ScrollbarState,
-    horizontal_scroll_state: ScrollbarState,
-    horizontal_scroll: usize,
-) {
+pub fn render_why_depends(f: &mut Frame, area: Rect, modal: &Modal) {
+    let Modal::WhyDepends {
+        paths: _,
+        formatted_lines,
+        max_line_width,
+        selected,
+        vertical_scroll_state,
+        horizontal_scroll_state,
+        horizontal_scroll,
+    } = modal;
+    let (max_line_width, selected, horizontal_scroll) =
+        (*max_line_width, *selected, *horizontal_scroll);
+
     let modal_area = centered_rect(90, 60, area);
 
     // Clear with black background
@@ -298,7 +301,7 @@ pub fn render_why_depends(
             .begin_symbol(Some("↑"))
             .end_symbol(Some("↓"));
 
-        let mut v_state = vertical_scroll_state;
+        let mut v_state = *vertical_scroll_state;
         // Ensure the inner area calculation doesn't go negative
         if inner_area.height > 2 {
             f.render_stateful_widget(
@@ -318,7 +321,7 @@ pub fn render_why_depends(
             .begin_symbol(Some("←"))
             .end_symbol(Some("→"));
 
-        let mut h_state = horizontal_scroll_state;
+        let mut h_state = *horizontal_scroll_state;
         f.render_stateful_widget(
             horizontal_scrollbar,
             inner_area.inner(Margin {
@@ -333,26 +336,7 @@ pub fn render_why_depends(
 pub fn render_modal(f: &mut Frame, app: &App, area: Rect) {
     if let Some(modal) = &app.modal {
         match modal {
-            Modal::WhyDepends {
-                paths: _,
-                formatted_lines,
-                max_line_width,
-                selected,
-                vertical_scroll_state,
-                horizontal_scroll_state,
-                horizontal_scroll,
-            } => {
-                render_why_depends(
-                    f,
-                    area,
-                    formatted_lines,
-                    *max_line_width,
-                    *selected,
-                    *vertical_scroll_state,
-                    *horizontal_scroll_state,
-                    *horizontal_scroll,
-                );
-            }
+            Modal::WhyDepends { .. } => render_why_depends(f, area, modal),
         }
     }
 }
