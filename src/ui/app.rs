@@ -61,6 +61,25 @@ impl App {
             .for_path(&self.graph, path, &context)
     }
 
+    fn sorted(&self, mut items: Vec<String>, context: Option<&[String]>) -> Vec<String> {
+        let added = match (self.sort_order, context) {
+            (SortOrder::AddedSize, Some(ctx)) => Some(self.added_size.borrow_mut().for_items(
+                &self.graph,
+                &items,
+                ctx,
+            )),
+            _ => None,
+        };
+        crate::path_stats::sort_paths(
+            &mut items,
+            &self.graph,
+            &self.stats,
+            self.sort_order,
+            added.as_ref(),
+        );
+        items
+    }
+
     pub fn get_parent_context(&self) -> Vec<String> {
         // Get the parent context from navigation history
         // For added size calculation, we need the specific parent we navigated from
@@ -104,7 +123,9 @@ impl App {
 
         // Start with all roots in the current pane
         app.current_items = app.graph.roots.clone();
-        crate::path_stats::sort_paths(&mut app.current_items, &app.stats, app.sort_order);
+        let roots = app.graph.roots.clone();
+        let items = std::mem::take(&mut app.current_items);
+        app.current_items = app.sorted(items, Some(&roots));
 
         if !app.current_items.is_empty() {
             app.current_state.select(Some(0));
@@ -298,26 +319,23 @@ impl App {
     fn update_panes(&mut self) {
         // Use the selected item in current_items as the focus
         let selected_idx = self.current_state.selected().unwrap_or(0);
-        if let Some(path) = self.current_items.get(selected_idx) {
+        if let Some(path) = self.current_items.get(selected_idx).cloned() {
             self.current_path = Some(path.clone());
 
-            // Update referrers (left pane)
-            self.previous_items = self
+            let parents = self
                 .stats
-                .get(path)
+                .get(&path)
                 .map(|s| s.immediate_parents.clone())
                 .unwrap_or_default();
-            crate::path_stats::sort_paths(&mut self.previous_items, &self.stats, self.sort_order);
+            self.previous_items = self.sorted(parents, None);
 
-            // Update dependencies (right pane)
-            let mut refs = self
+            let refs = self
                 .graph
-                .get_references(path)
+                .get_references(&path)
                 .into_iter()
                 .map(|p| p.path.clone())
                 .collect::<Vec<_>>();
-            crate::path_stats::sort_paths(&mut refs, &self.stats, self.sort_order);
-            self.next_items = refs;
+            self.next_items = self.sorted(refs, Some(std::slice::from_ref(&path)));
 
             // Reset selections in side panes but keep current pane focus
             self.previous_state = ListState::default();
@@ -337,9 +355,14 @@ impl App {
     }
 
     fn resort_current_pane(&mut self) {
-        crate::path_stats::sort_paths(&mut self.current_items, &self.stats, self.sort_order);
-        crate::path_stats::sort_paths(&mut self.previous_items, &self.stats, self.sort_order);
-        crate::path_stats::sort_paths(&mut self.next_items, &self.stats, self.sort_order);
+        let parent = self.get_parent_context();
+        let next_ctx = self.current_path.clone().map(|p| vec![p]);
+        let cur = std::mem::take(&mut self.current_items);
+        let prev = std::mem::take(&mut self.previous_items);
+        let next = std::mem::take(&mut self.next_items);
+        self.current_items = self.sorted(cur, Some(&parent));
+        self.previous_items = self.sorted(prev, None);
+        self.next_items = self.sorted(next, next_ctx.as_deref());
     }
 
     fn perform_search(&mut self) {
@@ -357,8 +380,8 @@ impl App {
             .collect();
 
         if !matching_paths.is_empty() {
-            self.current_items = matching_paths;
-            crate::path_stats::sort_paths(&mut self.current_items, &self.stats, self.sort_order);
+            let roots = self.graph.roots.clone();
+            self.current_items = self.sorted(matching_paths, Some(&roots));
             self.current_state.select(Some(0));
             self.active_pane = Pane::Current;
             self.update_panes();
@@ -412,9 +435,8 @@ impl App {
         // Clear navigation history
         self.navigation_history.clear();
 
-        // Start from roots
-        self.current_items = self.graph.roots.clone();
-        crate::path_stats::sort_paths(&mut self.current_items, &self.stats, self.sort_order);
+        let roots = self.graph.roots.clone();
+        self.current_items = self.sorted(roots.clone(), Some(&roots));
 
         // Navigate through the path
         for (i, target) in path.iter().enumerate() {
