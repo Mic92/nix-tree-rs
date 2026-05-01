@@ -84,6 +84,15 @@ pub fn write(old: &StorePathGraph, new: &StorePathGraph, out: &mut impl Write) -
         });
     }
 
+    // Match nix store diff-closures: hide entries that only changed hash
+    // (propagated rebuilds) unless their size moved noticeably.
+    const THRESHOLD: u64 = 8 * 1024;
+    rows.retain(|r| {
+        let bv = r.before.as_ref().map(|s| &s.versions);
+        let av = r.after.as_ref().map(|s| &s.versions);
+        bv != av || r.delta.unsigned_abs() >= THRESHOLD
+    });
+
     rows.sort_by_key(|r| std::cmp::Reverse(r.delta.unsigned_abs()));
 
     for r in &rows {
