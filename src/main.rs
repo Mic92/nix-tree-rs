@@ -48,14 +48,13 @@ async fn main() -> Result<()> {
     }
 
     println!("Loading store paths...");
-    let graph = nix::query_path_info(
-        &paths,
-        true,
-        config.store.as_deref(),
-        &config.nix_options,
-        config.file.as_deref(),
-    )
-    .await?;
+    let opts = nix::QueryOptions {
+        store: config.store,
+        nix_options: config.nix_options,
+        file: config.file,
+        derivation: config.derivation,
+    };
+    let graph = nix::query_path_info(&paths, true, &opts).await?;
 
     println!("Calculating sizes...");
     let stats = path_stats::calculate_stats(&graph);

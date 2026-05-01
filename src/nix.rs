@@ -18,33 +18,43 @@ struct NixPathInfo {
     closure_size: Option<u64>,
 }
 
-/// Resolve flake references and other inputs to store paths
-async fn resolve_paths(
-    paths: &[String],
-    store: Option<&str>,
-    nix_options: &[(String, String)],
-    file: Option<&str>,
-) -> Result<Vec<String>> {
-    let mut cmd = Command::new("nix");
-    cmd.arg("--extra-experimental-features")
-        .arg("nix-command flakes");
+#[derive(Debug, Default, Clone)]
+pub struct QueryOptions {
+    pub store: Option<String>,
+    pub nix_options: Vec<(String, String)>,
+    pub file: Option<String>,
+    pub derivation: bool,
+}
 
-    // Add nix options
-    for (name, value) in nix_options {
+/// Must be called after the `path-info` subcommand: `--file`/`--derivation`
+/// are subcommand flags and are rejected in global position.
+fn apply_common_args(cmd: &mut Command, opts: &QueryOptions) {
+    for (name, value) in &opts.nix_options {
         cmd.arg("--option").arg(name).arg(value);
     }
 
-    if let Some(store_url) = store {
+    if let Some(store_url) = &opts.store {
         cmd.arg("--store").arg(store_url);
     }
 
-    if let Some(file_path) = file {
+    if let Some(file_path) = &opts.file {
         cmd.arg("--file").arg(file_path);
     }
 
-    cmd.arg("path-info")
-        .arg("--json")
-        .args(paths)
+    if opts.derivation {
+        cmd.arg("--derivation");
+    }
+}
+
+/// Resolve flake references and other inputs to store paths
+async fn resolve_paths(paths: &[String], opts: &QueryOptions) -> Result<Vec<String>> {
+    let mut cmd = Command::new("nix");
+    cmd.arg("--extra-experimental-features")
+        .arg("nix-command flakes")
+        .arg("path-info")
+        .arg("--json");
+    apply_common_args(&mut cmd, opts);
+    cmd.args(paths)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -66,34 +76,24 @@ async fn resolve_paths(
 pub async fn query_path_info(
     paths: &[String],
     recursive: bool,
-    store: Option<&str>,
-    nix_options: &[(String, String)],
-    file: Option<&str>,
+    opts: &QueryOptions,
 ) -> Result<StorePathGraph> {
     // First resolve any flake references to store paths
-    let resolved_paths = resolve_paths(paths, store, nix_options, file).await?;
+    let resolved_paths = resolve_paths(paths, opts).await?;
 
     let mut cmd = Command::new("nix");
     cmd.arg("--extra-experimental-features")
-        .arg("nix-command flakes");
-
-    // Add nix options
-    for (name, value) in nix_options {
-        cmd.arg("--option").arg(name).arg(value);
-    }
-
-    if let Some(store_url) = store {
-        cmd.arg("--store").arg(store_url);
-    }
-
-    if let Some(file_path) = file {
-        cmd.arg("--file").arg(file_path);
-    }
-
-    cmd.arg("path-info")
+        .arg("nix-command flakes")
+        .arg("path-info")
         .arg("--json")
-        .arg("--closure-size")
-        .args(&resolved_paths)
+        .arg("--closure-size");
+    // resolved_paths are store paths; --file would misinterpret them as attrs.
+    let store_opts = QueryOptions {
+        file: None,
+        ..opts.clone()
+    };
+    apply_common_args(&mut cmd, &store_opts);
+    cmd.args(&resolved_paths)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
