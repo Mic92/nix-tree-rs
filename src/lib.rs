@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod clipboard;
 pub mod dot;
 pub mod nix;
 pub mod path_stats;
