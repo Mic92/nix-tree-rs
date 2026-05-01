@@ -15,11 +15,10 @@ pub fn render_help(f: &mut Frame, area: Rect) {
         Line::from("nix-tree - Interactive Nix dependency viewer"),
         Line::from(""),
         Line::from("Navigation:"),
-        Line::from("  j/↓     Move down"),
-        Line::from("  k/↑     Move up"),
-        Line::from("  h/←     Move to previous pane"),
-        Line::from("  l/→     Move to next pane"),
-        Line::from("  Enter   Select item"),
+        Line::from("  j/↓  k/↑        Move down/up"),
+        Line::from("  h/←  l/→        Ascend/descend into dependencies"),
+        Line::from("  g/Home G/End    Jump to first/last"),
+        Line::from("  PgUp PgDn       Move by page"),
         Line::from(""),
         Line::from("Actions:"),
         Line::from("  /       Search"),
@@ -28,7 +27,7 @@ pub fn render_help(f: &mut Frame, area: Rect) {
         Line::from("  ?       Toggle this help"),
         Line::from("  q/Esc   Quit"),
         Line::from(""),
-        Line::from("Press any key to close this help"),
+        Line::from("Press ? to close"),
     ];
 
     let block = Block::default()
