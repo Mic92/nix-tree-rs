@@ -97,8 +97,6 @@ fn render_pane(f: &mut Frame, area: Rect, title: &str, ctx: &PaneRenderContext) 
                 .map(|p| if p.is_signed() { "✓ " } else { "  " })
                 .unwrap_or("  ");
 
-            // Right-align the size column so magnitudes line up regardless of
-            // name length, truncating the name if the row would overflow.
             let name_budget = inner_width
                 .saturating_sub(SIGN_W)
                 .saturating_sub(size_str.len() + 1);

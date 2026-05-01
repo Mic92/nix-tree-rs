@@ -60,9 +60,7 @@ fn dot_output_shape() -> Result<()> {
     assert!(dot.contains(r#""ntfx-app-1.0" -> "ntfx-libb-1.0""#));
     assert!(dot.contains(r#""ntfx-liba-1.0" -> "ntfx-libc-1.0""#));
     assert!(dot.contains(r#""ntfx-libb-1.0" -> "ntfx-libc-1.0""#));
-    // No edge that doesn't exist in the fixture.
     assert!(!dot.contains("libd"));
-    // No self-reference noise.
     assert!(!dot.contains(r#""ntfx-libc-1.0" -> "ntfx-libc-1.0""#));
 
     Ok(())
@@ -74,7 +72,6 @@ fn diff_output() -> Result<()> {
     let diff = run(&["--diff", &f.v1, &f.v2])?;
     let lines: Vec<&str> = diff.lines().collect();
 
-    // libb removed, libd added, app version bumped.
     let libb = lines
         .iter()
         .find(|l| l.contains("ntfx-libb"))
@@ -97,7 +94,6 @@ fn diff_output() -> Result<()> {
     assert!(!diff.contains("ntfx-liba"));
     assert!(!diff.contains("ntfx-libc"));
 
-    // Summary line with totals.
     let summary = lines.last().unwrap();
     assert!(
         summary.contains("paths →") && summary.contains('('),
