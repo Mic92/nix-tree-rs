@@ -7,9 +7,6 @@ use crate::store_path::{StorePath, StorePathGraph};
 
 #[derive(Debug, Deserialize)]
 struct NixPathInfo {
-    #[serde(rename = "narHash")]
-    #[allow(dead_code)]
-    nar_hash: Option<String>,
     #[serde(rename = "narSize")]
     nar_size: u64,
     references: Vec<String>,

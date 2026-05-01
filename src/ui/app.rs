@@ -13,8 +13,6 @@ pub enum Pane {
     Next,
 }
 
-impl Pane {}
-
 pub enum Modal {
     WhyDepends {
         paths: Vec<Vec<String>>,
