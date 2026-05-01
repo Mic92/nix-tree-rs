@@ -1,3 +1,4 @@
+use crate::ui::app::{App, Modal};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Margin, Rect},
@@ -5,10 +6,6 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation},
 };
-use std::collections::HashSet;
-
-use crate::store_path::StorePathGraph;
-use crate::ui::app::{App, Modal};
 
 pub fn render_help(f: &mut Frame, area: Rect) {
     let help_text = vec![
@@ -84,22 +81,7 @@ pub fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
             let closure_size = stats
                 .map(|s| bytesize::ByteSize(s.closure_size))
                 .unwrap_or(bytesize::ByteSize(0));
-            // Calculate added size on-demand if not already calculated
-            let added_size = if let Some(s) = stats {
-                match s.added_size {
-                    Some(size) => bytesize::ByteSize(size),
-                    None => {
-                        // Calculate it now using the nix-tree algorithm
-                        // Use parent context for calculating added sizes
-                        let parent_context = app.get_parent_context();
-                        let added =
-                            calculate_added_size_for_path(path, &app.graph, &parent_context);
-                        bytesize::ByteSize(added)
-                    }
-                }
-            } else {
-                bytesize::ByteSize(0)
-            };
+            let added_size = bytesize::ByteSize(app.added_size_of(path));
 
             let signatures = if store_path.signatures.is_empty() {
                 "none".to_string()
@@ -167,76 +149,6 @@ pub fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
         let paragraph = Paragraph::new(status_line);
         f.render_widget(paragraph, area);
     }
-}
-
-fn calculate_added_size_for_path(
-    path: &str,
-    graph: &StorePathGraph,
-    context_roots: &[String],
-) -> u64 {
-    // Following the original nix-tree logic:
-    // addedSize = totalSize - filteredSize
-    // where filteredSize = size of closure of (contextRoots - currentPath)
-
-    // First, we need to calculate the total size of the current context
-    // This is the closure of all items in the current view
-    let mut context_closure = HashSet::new();
-    for root in context_roots {
-        let mut to_visit = vec![root.clone()];
-        while let Some(current) = to_visit.pop() {
-            if context_closure.insert(current.clone()) {
-                if let Some(sp) = graph.get_path(&current) {
-                    for reference in &sp.references {
-                        if !context_closure.contains(reference) {
-                            to_visit.push(reference.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let context_total_size: u64 = context_closure
-        .iter()
-        .filter_map(|p| graph.get_path(p))
-        .map(|p| p.nar_size)
-        .sum();
-
-    // Build closure of all context roots, excluding current path and its descendants
-    let mut filtered_closure = HashSet::new();
-
-    for root in context_roots {
-        // Skip current path when building the filtered closure
-        if root != path {
-            let mut to_visit = vec![root.clone()];
-            while let Some(current) = to_visit.pop() {
-                // Skip the target path completely - don't add it or traverse its children
-                if current == path {
-                    continue;
-                }
-
-                if filtered_closure.insert(current.clone()) {
-                    if let Some(sp) = graph.get_path(&current) {
-                        for reference in &sp.references {
-                            if !filtered_closure.contains(reference) && reference != path {
-                                to_visit.push(reference.clone());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Calculate size of the filtered closure
-    let filtered_size: u64 = filtered_closure
-        .iter()
-        .filter_map(|p| graph.get_path(p))
-        .map(|p| p.nar_size)
-        .sum();
-
-    // Added size is context total minus filtered
-    context_total_size.saturating_sub(filtered_size)
 }
 
 pub fn render_why_depends(f: &mut Frame, area: Rect, modal: &Modal) {
