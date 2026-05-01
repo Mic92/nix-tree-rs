@@ -100,6 +100,20 @@ impl AddedSize {
         }
     }
 
+    /// Added sizes for every `item` relative to `context`, computed in one pass
+    /// so the cached context total is reused across the batch.
+    pub fn for_items(
+        &mut self,
+        graph: &StorePathGraph,
+        items: &[String],
+        context: &[String],
+    ) -> HashMap<String, u64> {
+        items
+            .iter()
+            .map(|p| (p.clone(), self.for_path(graph, p, context)))
+            .collect()
+    }
+
     pub fn for_path(&mut self, graph: &StorePathGraph, path: &str, context: &[String]) -> u64 {
         let roots: Vec<u32> = context
             .iter()
@@ -123,7 +137,6 @@ impl AddedSize {
 #[derive(Debug, Clone)]
 pub struct PathStats {
     pub closure_size: u64,
-    pub added_size: Option<u64>, // None means not yet calculated
     pub immediate_parents: Vec<String>,
 }
 
@@ -143,7 +156,6 @@ pub fn calculate_stats(graph: &StorePathGraph) -> HashMap<String, PathStats> {
             path.path.clone(),
             PathStats {
                 closure_size,
-                added_size: None, // Will be calculated on-demand
                 immediate_parents,
             },
         );
@@ -177,25 +189,36 @@ impl SortOrder {
     }
 }
 
-pub fn sort_paths(paths: &mut [String], stats: &HashMap<String, PathStats>, order: SortOrder) {
-    paths.sort_by(|a, b| {
-        let stat_a = stats.get(a);
-        let stat_b = stats.get(b);
-
-        match order {
-            SortOrder::Alphabetical => a.cmp(b),
-            SortOrder::ClosureSize => {
-                let size_a = stat_a.map(|s| s.closure_size).unwrap_or(0);
-                let size_b = stat_b.map(|s| s.closure_size).unwrap_or(0);
-                size_b.cmp(&size_a)
-            }
-            SortOrder::AddedSize => {
-                let size_a = stat_a.and_then(|s| s.added_size).unwrap_or(0);
-                let size_b = stat_b.and_then(|s| s.added_size).unwrap_or(0);
-                size_b.cmp(&size_a)
-            }
+pub fn sort_paths(
+    paths: &mut [String],
+    graph: &StorePathGraph,
+    stats: &HashMap<String, PathStats>,
+    order: SortOrder,
+    added: Option<&HashMap<String, u64>>,
+) {
+    match order {
+        SortOrder::Alphabetical => {
+            paths.sort_by(|a, b| {
+                let na = graph.get_path(a).map(|p| p.name.as_str()).unwrap_or(a);
+                let nb = graph.get_path(b).map(|p| p.name.as_str()).unwrap_or(b);
+                na.cmp(nb)
+            });
         }
-    });
+        SortOrder::ClosureSize => {
+            paths.sort_by_key(|p| std::cmp::Reverse(stats.get(p).map_or(0, |s| s.closure_size)));
+        }
+        SortOrder::AddedSize => {
+            // Without a context (e.g. referrers pane) added size is undefined;
+            // closure size is the next best stable order.
+            paths.sort_by_key(|p| {
+                std::cmp::Reverse(
+                    added
+                        .and_then(|m| m.get(p).copied())
+                        .unwrap_or_else(|| stats.get(p).map_or(0, |s| s.closure_size)),
+                )
+            });
+        }
+    }
 }
 
 // Trie-like structure for efficient path storage

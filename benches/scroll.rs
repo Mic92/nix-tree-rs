@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
     // Put a large list into the current pane to mimic the laggy case
     // (e.g. referrers of glibc, or search results).
     let mut all: Vec<String> = app.graph.paths.iter().map(|p| p.path.clone()).collect();
-    path_stats::sort_paths(&mut all, &app.stats, app.sort_order);
+    path_stats::sort_paths(&mut all, &app.graph, &app.stats, app.sort_order, None);
     eprintln!("  current pane size: {}", all.len());
     app.current_items = all;
     app.current_state.select(Some(0));
