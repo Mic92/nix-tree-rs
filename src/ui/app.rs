@@ -165,6 +165,15 @@ impl App {
                         KeyCode::Char('q') | KeyCode::Esc => {
                             self.modal = None;
                         }
+                        KeyCode::Char('y') => {
+                            if let Some(chain) = paths.get(*selected) {
+                                let text = chain.join(" ");
+                                self.status_message = Some(match crate::clipboard::copy(&text) {
+                                    Ok(()) => format!("Copied {} paths", chain.len()),
+                                    Err(e) => format!("Clipboard error: {e}"),
+                                });
+                            }
+                        }
                         KeyCode::Down | KeyCode::Char('j') => {
                             if *selected < formatted_lines.len().saturating_sub(1) {
                                 *selected += 1;
@@ -256,6 +265,7 @@ impl App {
             }
             KeyCode::Char('w') => self.show_why_depends(),
             KeyCode::Char('y') => self.yank_current_path(),
+            KeyCode::Char('r') => self.jump_to_roots(),
             KeyCode::Char('s') => {
                 self.sort_order = self.sort_order.next();
                 self.resort_current_pane();
@@ -273,6 +283,17 @@ impl App {
         }
 
         Ok(false)
+    }
+
+    fn jump_to_roots(&mut self) {
+        self.navigation_history.clear();
+        let roots = self.graph.roots.clone();
+        (self.current_items, self.current_added) = self.sorted(roots.clone(), Some(&roots));
+        self.current_state = ListState::default();
+        if !self.current_items.is_empty() {
+            self.current_state.select(Some(0));
+        }
+        self.update_panes();
     }
 
     fn yank_current_path(&mut self) {
