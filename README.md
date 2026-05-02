@@ -3,6 +3,8 @@
 Interactively browse dependency graphs of Nix derivations. A Rust port of
 [nix-tree].
 
+![demo](https://github.com/Mic92/nix-tree-rs/releases/download/assets/demo.webp)
+
 ## Why a port?
 
 On large closures the original spends most of its startup computing closure
